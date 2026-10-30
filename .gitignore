@@ -1,0 +1,51 @@
+# Môi trường ảo (Virtual Environments)
+venv/
+env/
+ENV/
+.venv/
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Biến môi trường & cấu hình bảo mật
+.env
+.env.local
+*.env
+!.env.example
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# AI / DeepFace Models & Weights (tránh đẩy model nặng lên git)
+.deepface/
+weights/
+*.h5
+*.pt
+*.pth
+*.onnx
+
+# Dữ liệu tạm, upload & static sinh ra khi chạy
+static/uploads/
+static/captures/
+static/temp/
+*.log
+
+# Dữ liệu lưu trữ cục bộ (MinIO / Qdrant storage nếu mount volume local)
+minio_data/
+qdrant_storage/
+
+# Node / Frontend (nếu frontend dùng npm/node_modules)
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+
+# Docker & OS
+.DS_Store
+Thumbs.db
