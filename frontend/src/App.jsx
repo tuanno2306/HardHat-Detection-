@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
+import { Smartphone, CheckCircle2, AlertCircle } from 'lucide-react'
 import Sidebar from './components/Sidebar'
 import Header from './components/Header'
 import MetricCards from './components/MetricCards'
@@ -50,6 +51,14 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isTechSpecsOpen, setIsTechSpecsOpen] = useState(false)
   const [isCameraLoading, setIsCameraLoading] = useState(false)
+  const [toast, setToast] = useState(null)
+
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type })
+    setTimeout(() => {
+      setToast(null)
+    }, 3500)
+  }
 
   const audioRef = useRef(null)
   const clientLastAlertIdRef = useRef(null)
@@ -270,7 +279,7 @@ export default function App() {
         setStatus(prev => ({ ...prev, camera_enabled: data.camera_enabled }))
       }
     } catch (e) {
-      alert("Lỗi bật/tắt camera: " + e.message)
+      showToast("Lỗi bật/tắt camera: " + e.message, "error")
     } finally {
       setIsCameraLoading(false)
     }
@@ -291,7 +300,7 @@ export default function App() {
         setStatus(prev => ({ ...prev, camera_source: data.source }))
       }
     } catch (e) {
-      alert("Lỗi đổi nguồn camera: " + e.message)
+      showToast("Lỗi đổi nguồn camera: " + e.message, "error")
     } finally {
       setIsCameraLoading(false)
     }
@@ -308,14 +317,15 @@ export default function App() {
     }
   }
 
-  // Thử rung máy & loa ngoài trên điện thoại IP Webcam
+  // Thử rung máy & loa ngoài trên điện thoại IP Webcam (Non-blocking Toast)
   const handleTestPhoneAlert = async () => {
     try {
+      showToast("Đang kích hoạt rung & loa ngoài điện thoại...", "info")
       const res = await fetch('/api/test_phone_alert', { method: 'POST' })
       const data = await res.json()
-      alert(data.message)
+      showToast(data.message, data.success ? "success" : "error")
     } catch (e) {
-      alert("Lỗi kết nối điện thoại: " + e.message)
+      showToast("Lỗi kết nối điện thoại: " + e.message, "error")
     }
   }
 
@@ -343,10 +353,52 @@ export default function App() {
         body: JSON.stringify(settings)
       })
       const data = await res.json()
+      if (data.success) {
+        showToast("Đã lưu cấu hình thành công!", "success")
+      }
       return data.success
     } catch (e) {
-      alert("Lỗi lưu cấu hình: " + e.message)
+      showToast("Lỗi lưu cấu hình: " + e.message, "error")
       return false
+    }
+  }
+
+  // Xóa 1 vi phạm (khi AI detect sai / false positive)
+  const handleDeleteViolation = async (id) => {
+    if (!id) return
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa vụ vi phạm #${id} do AI nhận diện sai không?`)) {
+      return
+    }
+    try {
+      const res = await fetch(`/api/violations/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        showToast(data.message, "success")
+        fetchHistory()
+      } else {
+        showToast(data.message, "error")
+      }
+    } catch (e) {
+      showToast("Lỗi khi xóa vi phạm: " + e.message, "error")
+    }
+  }
+
+  // Xóa toàn bộ vi phạm
+  const handleClearAllViolations = async () => {
+    if (!window.confirm("Bạn có chắc chắn muốn XÓA TOÀN BỘ nhật ký vi phạm không? Hành động này không thể hoàn tác!")) {
+      return
+    }
+    try {
+      const res = await fetch('/api/violations/clear', { method: 'POST' })
+      const data = await res.json()
+      if (data.success) {
+        showToast(data.message, "success")
+        fetchHistory()
+      } else {
+        showToast(data.message, "error")
+      }
+    } catch (e) {
+      showToast("Lỗi khi xóa toàn bộ vi phạm: " + e.message, "error")
     }
   }
 
@@ -461,6 +513,8 @@ export default function App() {
                   history={history}
                   onSelectSnapshot={(url) => setSelectedSnapshot(url)}
                   onOpenDailyPage={() => setCurrentView('violations')}
+                  onDeleteViolation={handleDeleteViolation}
+                  onClearAllViolations={handleClearAllViolations}
                 />
               </div>
 
@@ -502,6 +556,26 @@ export default function App() {
         imageUrl={selectedSnapshot} 
         onClose={() => setSelectedSnapshot(null)} 
       />
+
+      {/* Global Floating Toast Notification */}
+      {toast && (
+        <div className={`fixed bottom-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md border text-sm font-medium transition-all animate-bounce ${
+          toast.type === 'error'
+            ? 'bg-rose-950/90 text-rose-100 border-rose-500/50'
+            : toast.type === 'success'
+            ? 'bg-emerald-950/90 text-emerald-100 border-emerald-500/50'
+            : 'bg-slate-900/90 text-slate-100 border-cyan-500/50'
+        }`}>
+          {toast.type === 'error' ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+          ) : toast.type === 'success' ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          ) : (
+            <Smartphone className="w-4 h-4 text-cyan-400 shrink-0" />
+          )}
+          <span>{toast.message}</span>
+        </div>
+      )}
 
     </div>
   )

@@ -28,6 +28,12 @@ export default function VideoPlayer({
   const [sourceInput, setSourceInput] = useState(status.camera_source || '0')
   const [showSource, setShowSource] = useState(false)
   const [snapshotMsg, setSnapshotMsg] = useState(null)
+  const [streamVersion, setStreamVersion] = useState(1)
+
+  // Chỉ thay đổi streamVersion khi người dùng đổi nguồn camera hoặc bật/tắt camera
+  React.useEffect(() => {
+    setStreamVersion(v => v + 1)
+  }, [status.camera_source, status.camera_enabled])
 
   const isConnected = status.is_connected && status.camera_enabled
   const hasViolation = status.has_violation
@@ -147,9 +153,9 @@ export default function VideoPlayer({
         <div className="hud-corner-bl"></div>
         <div className="hud-corner-br"></div>
 
-        {/* Live Stream Image */}
+        {/* Live Stream Image - Ổn định duy nhất 1 kết nối, không reload theo chu kỳ polling */}
         <img 
-          src={`/video_feed?t=${Date.now()}`}
+          src={`/video_feed?v=${streamVersion}`}
           alt="Video Stream"
           className="w-full h-full object-contain block select-none pointer-events-none"
         />

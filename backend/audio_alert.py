@@ -180,4 +180,17 @@ class AudioAlertManager:
         with self.lock:
             return list(self.alert_history)
 
+    def remove_violation_from_history(self, violation_id):
+        """Xóa vi phạm khỏi bộ nhớ RAM của alert_manager"""
+        with self.lock:
+            self.alert_history = [
+                v for v in self.alert_history
+                if str(v.get("id")) != str(violation_id) and str(v.get("db_id")) != str(violation_id)
+            ]
+
+    def clear_all_history(self):
+        """Xóa toàn bộ lịch sử vi phạm trong RAM"""
+        with self.lock:
+            self.alert_history = []
+
 alert_manager = AudioAlertManager()

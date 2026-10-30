@@ -41,6 +41,7 @@ RUN mkdir -p /app/static/violations
 
 # Biến môi trường hệ thống
 ENV PYTHONUNBUFFERED=1
+ENV TZ=Asia/Ho_Chi_Minh
 ENV PYTHONPATH=/app/backend
 ENV REACT_DIST_DIR=/app/frontend/dist
 ENV STATIC_DIR=/app/static

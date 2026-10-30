@@ -29,7 +29,8 @@ import {
   Info,
   Filter,
   Check,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react'
 
 export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) {
@@ -103,6 +104,30 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
       }
     } catch (e) {
       console.warn("Lỗi fetch worker summary:", e)
+    }
+  }
+
+  // 4. Xóa 1 vi phạm do mô hình nhận diện sai (False Positive)
+  const handleDeleteViolation = async (id) => {
+    if (!id) return
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa vụ vi phạm #${id} do AI nhận diện sai không?`)) {
+      return
+    }
+    try {
+      const res = await fetch(`/api/violations/${id}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        setViolations(prev => prev.filter(v => v.id !== id))
+        fetchDayData(selectedDate)
+        setStatusNotification({
+          type: 'success',
+          message: data.message
+        })
+      } else {
+        alert(data.message)
+      }
+    } catch (e) {
+      alert("Lỗi khi xóa vi phạm: " + e.message)
     }
   }
 
@@ -777,13 +802,22 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
                     )}
                   </div>
 
-                  {/* Footer: Cán bộ trực ca ghi nhận */}
+                  {/* Footer: Cán bộ trực ca ghi nhận & Thao tác xóa */}
                   <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
                     <span className="flex items-center space-x-1 truncate">
                       <User className="w-3 h-3 text-slate-400" />
                       <span>Trực ca: <strong className="text-slate-700 dark:text-slate-300 font-semibold">{v.detected_by_name || 'Hệ Thống'}</strong></span>
                     </span>
-                    <span className="font-mono text-slate-400 font-bold">#{v.id}</span>
+                    <div className="flex items-center space-x-1.5">
+                      <span className="font-mono text-slate-400 font-bold">#{v.id}</span>
+                      <button
+                        onClick={() => handleDeleteViolation(v.id)}
+                        className="p-1 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                        title="Xóa vi phạm này (Nhận diện sai / False positive)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -873,15 +907,24 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
                     <td className="py-3 px-4 font-mono text-amber-700 dark:text-amber-400 font-bold">{v.confidence_pct || 90}%</td>
                     <td className="py-3 px-4 text-slate-700 dark:text-slate-300 max-w-xs truncate">{v.details}</td>
                     <td className="py-3 px-4 text-center">
-                      {imageUrl && (
+                      <div className="flex items-center justify-center space-x-1.5">
+                        {imageUrl && (
+                          <button
+                            onClick={() => onSelectSnapshot(imageUrl)}
+                            className="p-1.5 rounded-lg bg-slate-100 hover:bg-amber-500 hover:text-slate-950 dark:bg-slate-800 dark:hover:bg-amber-500 dark:hover:text-slate-950 text-slate-600 dark:text-slate-300 transition-colors shadow-xs"
+                            title="Xem ảnh chi tiết"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <button
-                          onClick={() => onSelectSnapshot(imageUrl)}
-                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-amber-500 hover:text-slate-950 dark:bg-slate-800 dark:hover:bg-amber-500 dark:hover:text-slate-950 text-slate-600 dark:text-slate-300 transition-colors shadow-xs"
-                          title="Xem ảnh chi tiết"
+                          onClick={() => handleDeleteViolation(v.id)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-500 hover:text-white dark:bg-slate-800 dark:hover:bg-red-500 dark:hover:text-white text-slate-400 transition-colors shadow-xs"
+                          title="Xóa vụ vi phạm này (Nhận diện sai)"
                         >
-                          <Maximize2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 )

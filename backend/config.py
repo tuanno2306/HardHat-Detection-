@@ -1,6 +1,12 @@
 import os
+import time
 from pathlib import Path
 from dotenv import load_dotenv
+
+# Đặt múi giờ mặc định cho toàn bộ ứng dụng sang Giờ Việt Nam (UTC+7 / Asia/Ho_Chi_Minh)
+os.environ["TZ"] = os.getenv("TIMEZONE", "Asia/Ho_Chi_Minh")
+if hasattr(time, "tzset"):
+    time.tzset()
 
 # Tìm và nạp file .env từ thư mục gốc hoặc thư mục backend
 BASE_DIR = Path(__file__).resolve().parent

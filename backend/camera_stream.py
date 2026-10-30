@@ -159,6 +159,10 @@ class VideoCameraStream:
         - Tự động bỏ frame cũ khi mạng Wi-Fi bị nghẽn (Zero Buffer Lag)
         """
         import urllib.request
+        import socket
+
+        # Thiết lập socket timeout để không bao giờ bị treo vĩnh viễn trên stream.read()
+        socket.setdefaulttimeout(2.5)
 
         while self.is_running and self.worker_id == worker_id:
             if not self.is_camera_enabled:
@@ -167,7 +171,15 @@ class VideoCameraStream:
 
             self.status_message = "Đang kết nối camera điện thoại..."
             try:
-                self.http_stream = urllib.request.urlopen(url, timeout=4)
+                # Đóng kết nối cũ nếu còn tồn đọng
+                if self.http_stream is not None:
+                    try:
+                        self.http_stream.close()
+                    except Exception:
+                        pass
+                    self.http_stream = None
+
+                self.http_stream = urllib.request.urlopen(url, timeout=3.0)
                 stream = self.http_stream
                 if self.worker_id != worker_id:
                     break
@@ -222,7 +234,13 @@ class VideoCameraStream:
                     break
                 self.is_connected = False
                 self.status_message = "Mất kết nối camera điện thoại (Wi-Fi), đang thử lại..."
-                time.sleep(1.0)
+                try:
+                    if self.http_stream is not None:
+                        self.http_stream.close()
+                except Exception:
+                    pass
+                self.http_stream = None
+                time.sleep(0.35)  # Fast Reconnect: Thử lại nhanh sau 350ms thay vì 1 giây
 
     def _capture_opencv(self, parsed_src, worker_id):
         """Bộ thu hình ảnh OpenCV chuẩn cho Webcam máy tính hoặc RTSP"""

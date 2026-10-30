@@ -9,10 +9,15 @@ except ImportError:
     import config
 
 def get_db_connection():
-    """Tạo kết nối tới PostgreSQL theo cấu hình từ environment / config"""
+    """Tạo kết nối tới PostgreSQL với cấu hình múi giờ chuẩn Việt Nam (Asia/Ho_Chi_Minh)"""
+    tz_option = "-c timezone=Asia/Ho_Chi_Minh"
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+        return psycopg2.connect(
+            database_url, 
+            options=tz_option,
+            cursor_factory=RealDictCursor
+        )
 
     host = os.getenv("PG_HOST", "127.0.0.1")
     port = int(os.getenv("PG_PORT", "5432"))
@@ -26,6 +31,7 @@ def get_db_connection():
         user=user,
         password=password,
         dbname=dbname,
+        options=tz_option,
         cursor_factory=RealDictCursor
     )
 
@@ -664,6 +670,37 @@ def delete_worker(worker_id):
         deleted = cur.fetchone()
         conn.commit()
         return deleted
+    finally:
+        cur.close()
+        conn.close()
+
+def delete_violation(violation_id):
+    """Xóa 1 vụ vi phạm theo ID (áp dụng khi mô hình AI nhận diện sai / false positive)"""
+    conn = get_db_connection()
+    conn.autocommit = True
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM violations WHERE id = %s RETURNING id, snapshot_path;", (violation_id,))
+        deleted = cur.fetchone()
+        return bool(deleted)
+    except Exception as e:
+        print(f"[Database Error]: Lỗi xóa vi phạm id={violation_id}: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+def clear_all_violations():
+    """Xóa toàn bộ các bản ghi vi phạm (reset toàn bộ nhật ký)"""
+    conn = get_db_connection()
+    conn.autocommit = True
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM violations;")
+        return True
+    except Exception as e:
+        print(f"[Database Error]: Lỗi xóa tất cả vi phạm: {e}")
+        return False
     finally:
         cur.close()
         conn.close()

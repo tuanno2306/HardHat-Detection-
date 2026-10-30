@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 import base64
 from datetime import datetime
 from typing import Optional, Union, Dict, Any, List
@@ -131,21 +132,26 @@ class FaceScanProbeRequest(BaseModel):
 # VIDEO FEED STREAMING (MJPEG)
 # ==========================================
 
-def generate_frames():
-    """Generator sinh luồng MJPEG ổn định đạt 30-60 FPS cho trình duyệt"""
-    while True:
-        frame_bytes = camera_streamer.get_jpeg_frame()
-        if frame_bytes is not None:
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-            time.sleep(0.01)
-        else:
-            time.sleep(0.03)
+async def generate_frames(request: Request):
+    """Generator sinh luồng MJPEG ổn định đạt 30-60 FPS cho trình duyệt, tự động dừng khi client ngắt kết nối"""
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            frame_bytes = camera_streamer.get_jpeg_frame()
+            if frame_bytes is not None:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                await asyncio.sleep(0.01)
+            else:
+                await asyncio.sleep(0.03)
+    except (asyncio.CancelledError, GeneratorExit):
+        pass
 
 @app.get("/video_feed")
-def video_feed():
+async def video_feed(request: Request):
     return StreamingResponse(
-        generate_frames(), 
+        generate_frames(request), 
         media_type="multipart/x-mixed-replace; boundary=frame"
     )
 
@@ -422,6 +428,22 @@ def api_export_violations_by_date(date: str):
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+@app.delete("/api/violations/{violation_id}")
+def api_delete_violation(violation_id: int):
+    """Xóa 1 vụ vi phạm theo ID (áp dụng khi nhận diện sai / false positive)"""
+    success = database.delete_violation(violation_id)
+    alert_manager.remove_violation_from_history(violation_id)
+    if success:
+        return {"success": True, "message": f"Đã xóa vụ vi phạm #{violation_id} thành công!"}
+    return {"success": False, "message": f"Không tìm thấy vụ vi phạm #{violation_id} để xóa."}
+
+@app.post("/api/violations/clear")
+def api_clear_all_violations():
+    """Xóa toàn bộ các vụ vi phạm trong hệ thống"""
+    success = database.clear_all_violations()
+    alert_manager.clear_all_history()
+    return {"success": success, "message": "Đã xóa toàn bộ nhật ký vi phạm thành công!"}
 
 @app.get("/api/export_csv")
 def api_export_csv():
