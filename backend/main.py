@@ -467,6 +467,34 @@ def api_test_alert():
     )
     return {"success": True, "triggered": triggered, "message": "Đã kích hoạt thử nghiệm âm thanh!"}
 
+@app.post("/api/test_phone_alert")
+def api_test_phone_alert():
+    """Kích hoạt thử nghiệm loa ngoài, rung và chớp đèn flash trên điện thoại camera IP Webcam"""
+    try:
+        try:
+            from .phone_alert import phone_alert_manager
+        except ImportError:
+            from phone_alert import phone_alert_manager
+
+        src = camera_streamer.camera_source or config.DEFAULT_CAMERA_SOURCE
+        if not phone_alert_manager.is_phone_camera(src):
+            return {
+                "success": False,
+                "message": f"Nguồn hiện tại ({src}) không phải camera điện thoại IP Webcam. Vui lòng chuyển nguồn sang http://<IP>:8080/video trước."
+            }
+
+        triggered = phone_alert_manager.trigger_phone_alert(
+            camera_source=src,
+            message="Thử nghiệm chớp đèn flash và phát âm thanh loa ngoài điện thoại thành công!",
+            force=True
+        )
+        return {
+            "success": triggered,
+            "message": "Đã gửi tín hiệu chớp đèn flash và truyền âm thanh tới loa ngoài điện thoại!" if triggered else "Không thể gửi tín hiệu tới IP Webcam."
+        }
+    except Exception as e:
+        return {"success": False, "message": f"Lỗi điều khiển điện thoại: {str(e)}"}
+
 # ==========================================
 # QUẢN LÝ CÔNG NHÂN & NHẬN DIỆN KHUÔN MẶT (DEEPFACE + QDRANT)
 # ==========================================

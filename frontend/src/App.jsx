@@ -308,6 +308,17 @@ export default function App() {
     }
   }
 
+  // Thử rung máy & loa ngoài trên điện thoại IP Webcam
+  const handleTestPhoneAlert = async () => {
+    try {
+      const res = await fetch('/api/test_phone_alert', { method: 'POST' })
+      const data = await res.json()
+      alert(data.message)
+    } catch (e) {
+      alert("Lỗi kết nối điện thoại: " + e.message)
+    }
+  }
+
   // Chụp ảnh bằng chứng thủ công
   const handleManualSnapshot = async () => {
     try {
@@ -433,6 +444,7 @@ export default function App() {
                   status={status}
                   onToggleCamera={handleToggleCamera}
                   onTestAlert={handleTestAlert}
+                  onTestPhoneAlert={handleTestPhoneAlert}
                   onUpdateCamera={handleUpdateCamera}
                   onManualSnapshot={handleManualSnapshot}
                   isCameraLoading={isCameraLoading}

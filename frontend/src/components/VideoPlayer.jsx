@@ -20,6 +20,7 @@ export default function VideoPlayer({
   status, 
   onToggleCamera, 
   onTestAlert, 
+  onTestPhoneAlert,
   onUpdateCamera,
   onManualSnapshot,
   isCameraLoading
@@ -94,11 +95,23 @@ export default function VideoPlayer({
           <button
             onClick={onTestAlert}
             className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-xs text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 transition-colors shadow-sm"
-            title="Phát thử âm thanh cảnh báo loa"
+            title="Phát thử âm thanh cảnh báo loa trình duyệt"
           >
             <Bell className="w-3.5 h-3.5 text-amber-500" />
             <span className="hidden sm:inline">Thử Chuông</span>
           </button>
+
+          {/* Test Phone Alert (Flash & Speaker) */}
+          {status.camera_source && (status.camera_source.includes('8080') || status.camera_source.startsWith('http')) && (
+            <button
+              onClick={onTestPhoneAlert}
+              className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-xs text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 transition-colors shadow-sm"
+              title="Thử chớp đèn flash và phát âm thanh loa ngoài trên điện thoại camera"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-cyan-500" />
+              <span className="hidden sm:inline">Thử Loa & Flash ĐT</span>
+            </button>
+          )}
 
           {/* Camera Power Toggle */}
           <button

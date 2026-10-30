@@ -32,7 +32,6 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 # Sao chép mã nguồn backend
 COPY backend/ /app/backend/
 COPY static/ /app/static/
-COPY schema.sql /app/schema.sql
 
 # Sao chép gói build React SPA từ Stage 1
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist

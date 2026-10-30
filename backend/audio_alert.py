@@ -102,6 +102,22 @@ class AudioAlertManager:
             # Chỉ phát âm thanh cục bộ trên máy chủ nếu được cấu hình bật
             if self.enable_local_sound:
                 threading.Thread(target=self._play_sound_local, daemon=True).start()
+
+            # Kích hoạt cảnh báo phần cứng trên điện thoại (Rung, Chớp Flash, Loa ngoài) nếu nguồn là IP Webcam
+            effective_src = str(camera_source or config.DEFAULT_CAMERA_SOURCE)
+            if effective_src.startswith("http://") or effective_src.startswith("https://"):
+                try:
+                    try:
+                        from .phone_alert import phone_alert_manager
+                    except ImportError:
+                        from phone_alert import phone_alert_manager
+                    phone_alert_manager.trigger_phone_alert(
+                        camera_source=effective_src,
+                        message=config.ALERT_VOICE_MESSAGE
+                    )
+                except Exception as e:
+                    print(f"[Phone Alert Error]: {e}")
+
             return True
 
     def _play_sound_local(self):
