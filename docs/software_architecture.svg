@@ -1,0 +1,240 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" width="100%" height="100%" style="background:#0b0f19; font-family:'Segoe UI', Inter, -apple-system, sans-serif;">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#080c14" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="hdr-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="900" fill="url(#bg-grad)" rx="16" />
+  <rect x="2" y="2" width="1196" height="896" fill="none" stroke="#1e293b" stroke-width="2" rx="14" />
+
+  <!-- HEADER -->
+  <g transform="translate(40, 30)">
+    <rect x="0" y="0" width="1120" height="65" rx="10" fill="#111c30" stroke="#1e3a5f" stroke-width="1.5" />
+    <text x="30" y="40" fill="#f8fafc" font-size="22" font-weight="bold" letter-spacing="1.5">HARDHAT VISION • KIẾN TRÚC PHẦN MỀM TỔNG THỂ (SOFTWARE ARCHITECTURE)</text>
+    <rect x="920" y="16" width="170" height="32" rx="16" fill="#0284c7" fill-opacity="0.2" stroke="#38bdf8" stroke-width="1" />
+    <text x="1005" y="37" fill="#38bdf8" font-size="11" font-weight="bold" text-anchor="middle">Layered Architecture</text>
+  </g>
+
+  <!-- TẦNG 1: PRESENTATION LAYER (FRONTEND) -->
+  <g transform="translate(40, 115)">
+    <rect x="0" y="0" width="1120" height="135" rx="12" fill="#0f1b2d" stroke="#0284c7" stroke-width="1.5" />
+    <rect x="0" y="0" width="1120" height="32" rx="12" fill="#0284c7" fill-opacity="0.25" />
+    <text x="20" y="21" fill="#38bdf8" font-size="13" font-weight="bold">TẦNG 1: PRESENTATION LAYER (GIAO DIỆN NGƯỜI DÙNG - REACT 18 + VITE SPA)</text>
+
+    <!-- Component 1 -->
+    <g transform="translate(20, 45)">
+      <rect x="0" y="0" width="255" height="75" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="13" font-weight="bold">VideoPlayer Component</text>
+      <text x="15" y="44" fill="#94a3b8" font-size="11">• Live MJPEG Stream (/video_feed)</text>
+      <text x="15" y="62" fill="#38bdf8" font-size="11">• HUD Overlay, Crosshairs, Badges</text>
+    </g>
+
+    <!-- Component 2 -->
+    <g transform="translate(295, 45)">
+      <rect x="0" y="0" width="255" height="75" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="13" font-weight="bold">IncidentHistory &amp; DailyView</text>
+      <text x="15" y="44" fill="#94a3b8" font-size="11">• Nhật ký vi phạm thời gian thực</text>
+      <text x="15" y="62" fill="#f59e0b" font-size="11">• Tra cứu theo ngày &amp; Nút xóa sai sót</text>
+    </g>
+
+    <!-- Component 3 -->
+    <g transform="translate(570, 45)">
+      <rect x="0" y="0" width="255" height="75" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="13" font-weight="bold">Workers &amp; FaceScan View</text>
+      <text x="15" y="44" fill="#94a3b8" font-size="11">• Quản lý danh sách nhân sự</text>
+      <text x="15" y="62" fill="#ec4899" font-size="11">• Quét ảnh khuôn mặt đăng ký AI</text>
+    </g>
+
+    <!-- Component 4 -->
+    <g transform="translate(845, 45)">
+      <rect x="0" y="0" width="255" height="75" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="13" font-weight="bold">Telemetry &amp; Audio Client</text>
+      <text x="15" y="44" fill="#94a3b8" font-size="11">• Polling trạng thái định kỳ 400ms</text>
+      <text x="15" y="62" fill="#10b981" font-size="11">• Web Audio Synthesizer (Chuông)</text>
+    </g>
+  </g>
+
+  <!-- MŨI TÊN GIỮA TẦNG 1 VÀ TẦNG 2 -->
+  <g transform="translate(575, 250)">
+    <path d="M 0 0 L 0 20" stroke="#38bdf8" stroke-width="2" stroke-dasharray="4" />
+    <polygon points="-4,20 4,20 0,26" fill="#38bdf8" />
+    <text x="30" y="15" fill="#64748b" font-size="10">HTTP REST &amp; MJPEG</text>
+  </g>
+
+  <!-- TẦNG 2: API & GATEWAY LAYER (FASTAPI) -->
+  <g transform="translate(40, 280)">
+    <rect x="0" y="0" width="1120" height="125" rx="12" fill="#102235" stroke="#0ea5e9" stroke-width="1.5" />
+    <rect x="0" y="0" width="1120" height="32" rx="12" fill="#0ea5e9" fill-opacity="0.25" />
+    <text x="20" y="21" fill="#38bdf8" font-size="13" font-weight="bold">TẦNG 2: APPLICATION &amp; GATEWAY LAYER (FASTAPI ASGI SERVER - UVICORN)</text>
+
+    <!-- Middleware -->
+    <g transform="translate(20, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="12" font-weight="bold">Middlewares &amp; Bảo Mật</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• SessionMiddleware (Role-based)</text>
+      <text x="15" y="58" fill="#94a3b8" font-size="11">• CORSMiddleware (Cross-origin)</text>
+    </g>
+
+    <!-- REST Routes -->
+    <g transform="translate(295, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="12" font-weight="bold">Core REST Endpoints</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• /api/auth (Login / Register / Role)</text>
+      <text x="15" y="58" fill="#94a3b8" font-size="11">• /api/status (Live Telemetry)</text>
+    </g>
+
+    <!-- Streaming Feed -->
+    <g transform="translate(570, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="12" font-weight="bold">Streaming Response</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• GET /video_feed (Async Generator)</text>
+      <text x="15" y="58" fill="#10b981" font-size="11">• Cached JPEG Feed (30 FPS)</text>
+    </g>
+
+    <!-- Control APIs -->
+    <g transform="translate(845, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="24" fill="#f8fafc" font-size="12" font-weight="bold">Hardware &amp; Business APIs</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• /api/update_camera • /api/violations</text>
+      <text x="15" y="58" fill="#f59e0b" font-size="11">• /api/test_phone_alert • /api/workers</text>
+    </g>
+  </g>
+
+  <!-- MŨI TÊN GIỮA TẦNG 2 VÀ TẦNG 3 -->
+  <g transform="translate(575, 405)">
+    <path d="M 0 0 L 0 20" stroke="#0ea5e9" stroke-width="2" stroke-dasharray="4" />
+    <polygon points="-4,20 4,20 0,26" fill="#0ea5e9" />
+    <text x="30" y="15" fill="#64748b" font-size="10">Method Calls &amp; Event Dispatch</text>
+  </g>
+
+  <!-- TẦNG 3: BUSINESS LOGIC & SERVICES LAYER -->
+  <g transform="translate(40, 435)">
+    <rect x="0" y="0" width="1120" height="155" rx="12" fill="#14192b" stroke="#8b5cf6" stroke-width="1.5" />
+    <rect x="0" y="0" width="1120" height="32" rx="12" fill="#8b5cf6" fill-opacity="0.25" />
+    <text x="20" y="21" fill="#c084fc" font-size="13" font-weight="bold">TẦNG 3: BUSINESS LOGIC &amp; CORE SERVICES LAYER (CÁC DỊCH VỤ XỬ LÝ NGHIỆP VỤ)</text>
+
+    <!-- Service 1: Camera Streamer -->
+    <g transform="translate(20, 45)">
+      <rect x="0" y="0" width="255" height="95" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">Camera Streaming Service</text>
+      <text x="15" y="40" fill="#94a3b8" font-size="10">• Decoupled Ingestion Thread (30 FPS)</text>
+      <text x="15" y="56" fill="#94a3b8" font-size="10">• Resilient Socket (Timeout 4.0s)</text>
+      <text x="15" y="72" fill="#94a3b8" font-size="10">• Fast JPEG Pre-encode &amp; Cache</text>
+      <text x="15" y="88" fill="#38bdf8" font-size="10" font-weight="bold">camera_stream.py</text>
+    </g>
+
+    <!-- Service 2: Roboflow Detector -->
+    <g transform="translate(295, 45)">
+      <rect x="0" y="0" width="255" height="95" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">Object Detection Service</text>
+      <text x="15" y="40" fill="#94a3b8" font-size="10">• Roboflow Inference API Client</text>
+      <text x="15" y="56" fill="#94a3b8" font-size="10">• Bounding Box Class Logic</text>
+      <text x="15" y="72" fill="#94a3b8" font-size="10">• Vẽ Annotation (Khung xanh / Khung đỏ)</text>
+      <text x="15" y="88" fill="#c084fc" font-size="10" font-weight="bold">roboflow_detector.py</text>
+    </g>
+
+    <!-- Service 3: DeepFace Biometric -->
+    <g transform="translate(570, 45)">
+      <rect x="0" y="0" width="255" height="95" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">Face Recognition Service</text>
+      <text x="15" y="40" fill="#94a3b8" font-size="10">• DeepFace Facenet512 Representation</text>
+      <text x="15" y="56" fill="#94a3b8" font-size="10">• OpenCV RetinaFace / Haar Detector</text>
+      <text x="15" y="72" fill="#94a3b8" font-size="10">• Cosine Distance Matching (&gt;0.65)</text>
+      <text x="15" y="88" fill="#ec4899" font-size="10" font-weight="bold">deepface_service.py</text>
+    </g>
+
+    <!-- Service 4: Alert Manager -->
+    <g transform="translate(845, 45)">
+      <rect x="0" y="0" width="255" height="95" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">Alert &amp; Hardware Orchestrator</text>
+      <text x="15" y="40" fill="#94a3b8" font-size="10">• Cooldown 15s Rate Limiter</text>
+      <text x="15" y="56" fill="#94a3b8" font-size="10">• Background Daemon I/O Worker</text>
+      <text x="15" y="72" fill="#94a3b8" font-size="10">• WebSocket Audio Client (16kHz PCM)</text>
+      <text x="15" y="88" fill="#f59e0b" font-size="10" font-weight="bold">audio_alert.py • phone_alert.py</text>
+    </g>
+  </g>
+
+  <!-- MŨI TÊN GIỮA TẦNG 3 VÀ TẦNG 4 -->
+  <g transform="translate(575, 590)">
+    <path d="M 0 0 L 0 20" stroke="#8b5cf6" stroke-width="2" stroke-dasharray="4" />
+    <polygon points="-4,20 4,20 0,26" fill="#8b5cf6" />
+    <text x="30" y="15" fill="#64748b" font-size="10">Persistence &amp; External AI</text>
+  </g>
+
+  <!-- TẦNG 4: AI MODELS & PERSISTENCE LAYER -->
+  <g transform="translate(40, 620)">
+    <rect x="0" y="0" width="1120" height="125" rx="12" fill="#0d1d22" stroke="#10b981" stroke-width="1.5" />
+    <rect x="0" y="0" width="1120" height="32" rx="12" fill="#10b981" fill-opacity="0.25" />
+    <text x="20" y="21" fill="#34d399" font-size="13" font-weight="bold">TẦNG 4: DATA &amp; AI ENGINE LAYER (LƯU TRỮ VÀ MÔ HÌNH TRÍ TUỆ NHÂN TẠO)</text>
+
+    <!-- Roboflow Cloud -->
+    <g transform="translate(20, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">Roboflow Cloud RF-DETR</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• Model: hardhat3-dptal / v1</text>
+      <text x="15" y="58" fill="#38bdf8" font-size="11">• HTTP REST Inference API</text>
+    </g>
+
+    <!-- PostgreSQL -->
+    <g transform="translate(295, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">PostgreSQL 16 Database</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• Tables: users, violations, workers</text>
+      <text x="15" y="58" fill="#10b981" font-size="11">• Port 5433 (psycopg2-binary pool)</text>
+    </g>
+
+    <!-- MinIO -->
+    <g transform="translate(570, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">MinIO Object Storage (S3)</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• Bucket: hardhat-violations</text>
+      <text x="15" y="58" fill="#f59e0b" font-size="11">• Port 9000 API • Port 9001 Console</text>
+    </g>
+
+    <!-- Qdrant -->
+    <g transform="translate(845, 45)">
+      <rect x="0" y="0" width="255" height="68" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f8fafc" font-size="12" font-weight="bold">Qdrant Vector Database</text>
+      <text x="15" y="42" fill="#94a3b8" font-size="11">• Collection: worker_faces (512-dim)</text>
+      <text x="15" y="58" fill="#ec4899" font-size="11">• Distance: Cosine Similarity Index</text>
+    </g>
+  </g>
+
+  <!-- TẦNG 5: INFRASTRUCTURE & HARDWARE -->
+  <g transform="translate(40, 755)">
+    <rect x="0" y="0" width="1120" height="115" rx="12" fill="#171324" stroke="#64748b" stroke-width="1.5" />
+    <rect x="0" y="0" width="1120" height="30" rx="12" fill="#64748b" fill-opacity="0.25" />
+    <text x="20" y="20" fill="#cbd5e1" font-size="13" font-weight="bold">TẦNG 5: INFRASTRUCTURE &amp; HARDWARE (HẠ TẦNG TRIỂN KHAI VÀ THIẾT BỊ NGOẠI VI)</text>
+
+    <!-- Docker Compose -->
+    <g transform="translate(20, 40)">
+      <rect x="0" y="0" width="350" height="65" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#38bdf8" font-size="12" font-weight="bold">Docker &amp; Docker Compose</text>
+      <text x="15" y="40" fill="#94a3b8" font-size="11">• Container: hardhat_fastapi_app (Network: host)</text>
+      <text x="15" y="56" fill="#94a3b8" font-size="11">• Container: hardhat_minio (elestio/minio)</text>
+    </g>
+
+    <!-- Camera Hardware -->
+    <g transform="translate(385, 40)">
+      <rect x="0" y="0" width="350" height="65" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#10b981" font-size="12" font-weight="bold">Thiết Bị Camera Ngoại Vi</text>
+      <text x="15" y="40" fill="#94a3b8" font-size="11">• Android IP Webcam Wi-Fi (http://192.168.1.233:8080)</text>
+      <text x="15" y="56" fill="#94a3b8" font-size="11">• Laptop USB Webcam (/dev/video0) • RTSP Stream</text>
+    </g>
+
+    <!-- Output Devices -->
+    <g transform="translate(750, 40)">
+      <rect x="0" y="0" width="350" height="65" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1" />
+      <text x="15" y="22" fill="#f59e0b" font-size="12" font-weight="bold">Thiết Bị Cảnh Báo Đầu Ra</text>
+      <text x="15" y="40" fill="#94a3b8" font-size="11">• Loa ngoài điện thoại (Two-Way Audio WebSocket)</text>
+      <text x="15" y="56" fill="#94a3b8" font-size="11">• Loa máy tính / Trình duyệt Web Audio</text>
+    </g>
+  </g>
+
+</svg>
