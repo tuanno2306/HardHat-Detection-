@@ -25,6 +25,20 @@ class DeepFaceService:
         self.vector_size = 512
         logger.info(f"Khởi tạo DeepFaceService với model: {self.model_name}, detector: {self.primary_detector}")
 
+        # Tải sẵn bộ phân loại Haar Cascade cho Live Face Scan Probe (<15ms)
+        self.face_cascade = None
+        for cp in [
+            "/root/.deepface/weights/haarcascade_frontalface_default.xml",
+            os.path.expanduser("~/.deepface/weights/haarcascade_frontalface_default.xml")
+        ]:
+            if os.path.exists(cp):
+                try:
+                    self.face_cascade = cv2.CascadeClassifier(cp)
+                    logger.info(f"Loaded Haar Cascade preloader from {cp}")
+                    break
+                except Exception as e:
+                    logger.warning(f"Không thể nạp cascade từ {cp}: {e}")
+
     def _prepare_image(self, image_input: Union[str, bytes, np.ndarray, tuple]) -> Optional[np.ndarray]:
         """Chuẩn hóa mọi dạng đầu vào thành BGR numpy array chuẩn của OpenCV"""
         try:
@@ -148,55 +162,140 @@ class DeepFaceService:
 
         return detected_faces
 
-    def probe_face_alignment(self, image_input: Union[str, bytes, np.ndarray]) -> Dict[str, Any]:
+    def probe_face_alignment(self, image_input: Union[str, bytes, np.ndarray, tuple]) -> Dict[str, Any]:
         """
         Kiểm tra nhanh chất lượng khuôn mặt theo thời gian thực (phục vụ buồng quét mặt)
-        Trả về vị trí bounding box, chất lượng mặt và lời khuyên căn chỉnh.
+        Trả về vị trí bounding box, chất lượng mặt và lời khuyên căn chỉnh chi tiết theo từng hướng.
         """
         img = self._prepare_image(image_input)
         if img is None:
-            return {"detected": False, "message": "Không nhận được tín hiệu hình ảnh"}
+            return {
+                "detected": False, 
+                "status": "not_found", 
+                "direction": "none",
+                "advice": "Không nhận được tín hiệu hình ảnh từ camera",
+                "auto_capture_ready": False
+            }
 
         h, w, _ = img.shape
+        fx, fy, fw, fh = 0, 0, 0, 0
+        detected = False
 
-        try:
-            # Dùng opencv haar cascade để phản hồi siêu tốc (<15ms)
-            results = DeepFace.represent(
-                img_path=img,
-                model_name=self.model_name,
-                detector_backend="opencv",
-                enforce_detection=True,
-                align=False
-            )
-            if results and len(results) > 0:
-                area = results[0].get("facial_area", {})
-                fx, fy, fw, fh = area.get("x", 0), area.get("y", 0), area.get("w", 0), area.get("h", 0)
-                
-                # Tính tâm mặt
-                center_x = (fx + fw / 2) / w
-                center_y = (fy + fh / 2) / h
-                size_ratio = (fw * fh) / (w * h)
+        # Thử detector opencv haar cascade trước (siêu tốc <15ms)
+        if self.face_cascade is not None:
+            try:
+                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+                # Tăng tương phản nhẹ bằng equalizeHist để bắt mặt nhạy hơn trong môi trường webcam
+                gray_eq = cv2.equalizeHist(gray)
+                faces = self.face_cascade.detectMultiScale(
+                    gray_eq, 
+                    scaleFactor=1.08, 
+                    minNeighbors=3, 
+                    minSize=(30, 30)
+                )
+                if len(faces) == 0:
+                    faces = self.face_cascade.detectMultiScale(
+                        gray, 
+                        scaleFactor=1.08, 
+                        minNeighbors=3, 
+                        minSize=(30, 30)
+                    )
+                if len(faces) > 0:
+                    faces = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)
+                    fx, fy, fw, fh = [int(v) for v in faces[0]]
+                    detected = True
+            except Exception as e:
+                logger.debug(f"Haar cascade detection error: {e}")
 
-                is_centered = 0.35 <= center_x <= 0.65 and 0.25 <= center_y <= 0.70
-                is_good_size = 0.03 <= size_ratio <= 0.60
+        # Nếu cascade chưa thấy, dùng DeepFace.extract_faces với retinaface (độ chính xác cao)
+        if not detected:
+            try:
+                extracted = DeepFace.extract_faces(
+                    img_path=img,
+                    detector_backend="retinaface",
+                    enforce_detection=True,
+                    align=False
+                )
+                if extracted and len(extracted) > 0:
+                    area = extracted[0].get("facial_area", {})
+                    fx, fy, fw, fh = area.get("x", 0), area.get("y", 0), area.get("w", 0), area.get("h", 0)
+                    if fw > 20 and fh > 20:
+                        detected = True
+            except Exception:
+                pass
 
-                status = "optimal" if (is_centered and is_good_size) else "adjust"
-                advice = "Khuôn mặt chuẩn xác! Giữ nguyên để chụp." if status == "optimal" else "Vui lòng đưa mặt vào giữa khung tròn."
+        if not detected:
+            return {
+                "detected": False,
+                "status": "not_found",
+                "direction": "none",
+                "advice": "Chưa thấy khuôn mặt. Hãy nhìn thẳng vào camera!",
+                "box": None,
+                "center": None,
+                "auto_capture_ready": False
+            }
 
-                return {
-                    "detected": True,
-                    "status": status,
-                    "advice": advice,
-                    "box": {"x": fx, "y": fy, "w": fw, "h": fh},
-                    "center": {"x": center_x, "y": center_y}
-                }
-        except Exception:
-            pass
+        # Tọa độ tâm chuẩn hóa [0.0, 1.0]
+        center_x = (fx + fw / 2.0) / w
+        center_y = (fy + fh / 2.0) / h
+        width_ratio = fw / float(w)
+        height_ratio = fh / float(h)
+
+        # Vì màn hình hiển thị camera ở chế độ gương (-scale-x-100):
+        # Tọa độ X trên màn hình mắt người nhìn thấy là (1.0 - center_x)
+        screen_x = 1.0 - center_x
+
+        # Đánh giá vùng tâm lý tưởng:
+        # X từ 0.35 đến 0.65, Y từ 0.25 đến 0.65, kích thước khuôn mặt rộng từ 10% đến 58% khung hình
+        is_horizontally_centered = 0.35 <= center_x <= 0.65
+        is_vertically_centered = 0.25 <= center_y <= 0.65
+        is_good_distance = 0.10 <= width_ratio <= 0.58
+
+        # Sinh lời khuyên và hướng di chuyển cụ thể:
+        direction_code = "centered"
+        advice = ""
+
+        if width_ratio < 0.10:
+            direction_code = "closer"
+            advice = "🔍 Hãy tiến lại gần camera hơn một chút"
+        elif width_ratio > 0.58:
+            direction_code = "further"
+            advice = "🔙 Hãy lùi ra xa camera một chút"
+        elif screen_x < 0.35:
+            # Mặt đang nằm lệch bên trái màn hình người nhìn -> cần nhích sang phải màn hình
+            direction_code = "screen_right"
+            advice = "➡️ Nhích sang bên PHẢI màn hình"
+        elif screen_x > 0.65:
+            # Mặt đang nằm lệch bên phải màn hình người nhìn -> cần nhích sang trái màn hình
+            direction_code = "screen_left"
+            advice = "⬅️ Nhích sang bên TRÁI màn hình"
+        elif center_y < 0.25:
+            direction_code = "down"
+            advice = "⬇️ Hãy hạ thấp cằm / ngồi xuống một chút"
+        elif center_y > 0.65:
+            direction_code = "up"
+            advice = "⬆️ Hãy nâng cằm / ngồi thẳng người lên"
+        else:
+            direction_code = "centered"
+            advice = "🎯 Khuôn mặt chuẩn xác! Giữ nguyên 3s để tự động chụp..."
+
+        is_optimal = (
+            is_horizontally_centered and 
+            is_vertically_centered and 
+            is_good_distance
+        )
 
         return {
-            "detected": False,
-            "status": "not_found",
-            "advice": "Chưa phát hiện khuôn mặt. Hãy nhìn thẳng vào camera!"
+            "detected": True,
+            "status": "optimal" if is_optimal else "adjust",
+            "direction": direction_code,
+            "advice": advice,
+            "box": {"x": int(fx), "y": int(fy), "w": int(fw), "h": int(fh)},
+            "center": {"x": round(center_x, 3), "y": round(center_y, 3)},
+            "screen_x": round(screen_x, 3),
+            "width_ratio": round(width_ratio, 3),
+            "height_ratio": round(height_ratio, 3),
+            "auto_capture_ready": is_optimal
         }
 
 # Singleton instance

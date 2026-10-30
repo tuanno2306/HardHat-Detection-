@@ -9,7 +9,11 @@ import {
   Globe, 
   RefreshCw,
   CameraIcon,
-  CheckCircle2
+  CheckCircle2,
+  Lock,
+  Eye,
+  EyeOff,
+  ShieldCheck
 } from 'lucide-react'
 
 export default function VideoPlayer({ 
@@ -21,15 +25,31 @@ export default function VideoPlayer({
   isCameraLoading
 }) {
   const [sourceInput, setSourceInput] = useState(status.camera_source || '0')
+  const [showSource, setShowSource] = useState(false)
   const [snapshotMsg, setSnapshotMsg] = useState(null)
 
   const isConnected = status.is_connected && status.camera_enabled
   const hasViolation = status.has_violation
   const cameraEnabled = status.camera_enabled
 
+  // Che giấu chuỗi IP/RTSP riêng tư để tăng cường bảo mật giao diện
+  const getMaskedCameraLabel = (src) => {
+    if (!src || src === '0') return 'Webcam Laptop (Tích hợp)'
+    if (src.includes('8080') || src.startsWith('http')) return 'Camera Điện Thoại (Wi-Fi 🔒)'
+    if (src.startsWith('rtsp://')) return 'Camera RTSP Ngoài Trời (🔒)'
+    return 'Camera Giám Sát (🔒)'
+  }
+
   const handlePresetSelect = (val) => {
     setSourceInput(val)
     onUpdateCamera(val)
+    setShowSource(false) // Ẩn link ngay khi chuyển nguồn
+  }
+
+  const handleSubmitSource = (e) => {
+    e.preventDefault()
+    onUpdateCamera(sourceInput)
+    setShowSource(false) // Ẩn link IP/RTSP ngay sau khi bấm kết nối
   }
 
   const handleSnapshotClick = async () => {
@@ -43,7 +63,7 @@ export default function VideoPlayer({
   return (
     <div className="glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 p-4 relative overflow-hidden flex flex-col justify-between shadow-sm transition-colors duration-200">
       
-      {/* Video Header: Title & Camera Status Pill */}
+      {/* Video Header: Title & Masked Camera Status Badge */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center space-x-2">
           <div className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
@@ -52,8 +72,9 @@ export default function VideoPlayer({
           <span className="font-bold text-sm text-slate-900 dark:text-white tracking-wide">
             LIVE CAMERA FEED
           </span>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 font-mono">
-            {status.camera_source || '0'}
+          <span className="inline-flex items-center space-x-1.5 text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-cyan-700 dark:text-cyan-400 border border-slate-200 dark:border-slate-700 font-mono font-bold shadow-2xs">
+            <Lock className="w-3 h-3 text-emerald-500" />
+            <span>{getMaskedCameraLabel(status.camera_source)}</span>
           </span>
         </div>
 
@@ -156,8 +177,9 @@ export default function VideoPlayer({
             <Radio className="w-3.5 h-3.5 text-amber-500" />
             <span>Chuyển Nguồn Camera Nhanh:</span>
           </label>
-          <span className="text-[11px] text-slate-500">
-            Hỗ trợ RTSP Camera Công Nghiệp, Phone IP & Laptop Webcam
+          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center space-x-1 font-medium">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Bảo mật IP & RTSP đang kích hoạt</span>
           </span>
         </div>
 
@@ -195,7 +217,7 @@ export default function VideoPlayer({
             </div>
             <div>
               <div className="text-xs font-bold text-slate-900 dark:text-white">Camera Điện Thoại</div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-400">IP Webcam (Wi-Fi)</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">IP Webcam (Wi-Fi 🔒)</div>
             </div>
           </button>
 
@@ -213,31 +235,38 @@ export default function VideoPlayer({
             </div>
             <div>
               <div className="text-xs font-bold text-slate-900 dark:text-white">Camera RTSP Ngoài Trời</div>
-              <div className="text-[10px] text-slate-500 dark:text-slate-400">Hikvision / Dahua / Ezviz</div>
+              <div className="text-[10px] text-slate-500 dark:text-slate-400">Hikvision / Dahua (🔒)</div>
             </div>
           </button>
         </div>
 
-        {/* Custom Input Bar */}
+        {/* Custom Input Bar with Security Masking */}
         <form 
-          onSubmit={(e) => {
-            e.preventDefault()
-            onUpdateCamera(sourceInput)
-          }}
+          onSubmit={handleSubmitSource}
           className="flex items-center space-x-2"
         >
           <div className="relative flex-1">
             <input
-              type="text"
+              type={showSource ? "text" : "password"}
               value={sourceInput}
               onChange={(e) => setSourceInput(e.target.value)}
               placeholder="Nhập 0, link http://192.168.x.x:8080/video hoặc link rtsp://..."
-              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 shadow-sm font-mono"
+              className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl pl-3.5 pr-10 py-2 text-xs text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 shadow-sm font-mono tracking-wider"
             />
+            {sourceInput && sourceInput !== '0' && (
+              <button
+                type="button"
+                onClick={() => setShowSource(!showSource)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg transition-colors"
+                title={showSource ? "Ẩn địa chỉ IP/RTSP (Chế độ bảo mật)" : "Hiện địa chỉ IP/RTSP"}
+              >
+                {showSource ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
+            )}
           </div>
           <button
             type="submit"
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition-colors"
+            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-md shadow-emerald-600/20 transition-colors shrink-0"
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Kết Nối</span>

@@ -53,27 +53,84 @@ export default function App() {
 
   const audioRef = useRef(null)
   const clientLastAlertIdRef = useRef(null)
+  const prevHasViolationRef = useRef(false)
 
   // Khóa chống lặp âm thanh giữa các Tab trên cùng một máy
-  const canPlayAudioGlobally = () => {
+  const canPlayAudioGlobally = (force = false) => {
     const now = Date.now()
     const last = parseInt(localStorage.getItem('last_alert_played_time') || '0', 10)
-    if (now - last < 4000) return false
+    if (!force && (now - last < 3500)) return false
     localStorage.setItem('last_alert_played_time', now.toString())
     return true
   }
 
-  const playWarningSound = () => {
+  // Phát còi báo động công nghiệp bằng Web Audio API (Dự phòng đảm bảo 100% phát được tiếng)
+  const playWebAudioSiren = () => {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      if (ctx.state === 'suspended') {
+        ctx.resume()
+      }
+
+      const now = ctx.currentTime
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.type = 'sawtooth'
+
+      // Còi báo động hai âm vực luân phiên (Emergency Industrial Alarm)
+      osc.frequency.setValueAtTime(850, now)
+      osc.frequency.exponentialRampToValueAtTime(550, now + 0.22)
+      osc.frequency.exponentialRampToValueAtTime(850, now + 0.45)
+      osc.frequency.exponentialRampToValueAtTime(550, now + 0.68)
+
+      gain.gain.setValueAtTime(0.35, now)
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.75)
+
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.start(now)
+      osc.stop(now + 0.75)
+    } catch (e) {
+      console.warn("WebAudio siren error:", e)
+    }
+  }
+
+  const playWarningSound = (force = false) => {
     if (isAudioMuted) return
-    if (!canPlayAudioGlobally()) return
+    if (!canPlayAudioGlobally(force)) return
 
     if (audioRef.current) {
       audioRef.current.currentTime = 0
       audioRef.current.play().catch((err) => {
-        console.warn("[Audio] Trình duyệt cần tương tác để mở khoá loa:", err)
+        console.warn("[Audio] HTML5 audio gặp trở ngại trình duyệt, phát còi Web Audio dự phòng:", err)
+        playWebAudioSiren()
       })
+    } else {
+      playWebAudioSiren()
     }
   }
+
+  // Mở khóa âm thanh trình duyệt ngay khi người dùng chạm hoặc click lần đầu vào trang
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioRef.current) {
+        audioRef.current.play().then(() => {
+          audioRef.current.pause()
+          audioRef.current.currentTime = 0
+        }).catch(() => {})
+      }
+    }
+    window.addEventListener('click', unlockAudio, { once: true })
+    window.addEventListener('keydown', unlockAudio, { once: true })
+    window.addEventListener('touchstart', unlockAudio, { once: true })
+    return () => {
+      window.removeEventListener('click', unlockAudio)
+      window.removeEventListener('keydown', unlockAudio)
+      window.removeEventListener('touchstart', unlockAudio)
+    }
+  }, [])
 
   const toggleAudio = () => {
     const newState = !isAudioMuted
@@ -158,14 +215,29 @@ export default function App() {
         const data = await res.json()
         setStatus(data)
 
-        // Kiểm tra cảnh báo tuần tự cho Đa Client (Multi-user sync)
-        if (data.latest_alert_id && data.latest_alert_id !== clientLastAlertIdRef.current) {
-          if (clientLastAlertIdRef.current !== null) {
-            playWarningSound()
-            fetchHistory()
-          }
-          clientLastAlertIdRef.current = data.latest_alert_id
+        // Xử lý kích hoạt âm thanh cảnh báo tự động khi phát hiện vi phạm
+        const currentAlertId = data.latest_alert_id
+        const shouldPlayFlag = data.should_play_alert === true
+        const isNewAlertId = (
+          currentAlertId !== undefined && 
+          currentAlertId !== null && 
+          clientLastAlertIdRef.current !== null && 
+          currentAlertId > clientLastAlertIdRef.current
+        )
+        const isViolationTransition = (
+          data.has_violation === true && 
+          prevHasViolationRef.current === false
+        )
+
+        if (shouldPlayFlag || isNewAlertId || isViolationTransition) {
+          playWarningSound()
+          fetchHistory()
         }
+
+        if (currentAlertId !== undefined && currentAlertId !== null) {
+          clientLastAlertIdRef.current = currentAlertId
+        }
+        prevHasViolationRef.current = !!data.has_violation
 
       } catch (e) {
         console.warn("Polling error:", e)
@@ -227,7 +299,7 @@ export default function App() {
 
   // Thử chuông
   const handleTestAlert = async () => {
-    playWarningSound()
+    playWarningSound(true)
     try {
       await fetch('/api/test_alert', { method: 'POST' })
       fetchHistory()

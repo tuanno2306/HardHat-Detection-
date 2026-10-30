@@ -165,7 +165,7 @@ class VideoCameraStream:
                 time.sleep(0.2)
                 continue
 
-            self.status_message = f"Đang kết nối camera điện thoại: {url}..."
+            self.status_message = "Đang kết nối camera điện thoại..."
             try:
                 self.http_stream = urllib.request.urlopen(url, timeout=4)
                 stream = self.http_stream
@@ -174,7 +174,7 @@ class VideoCameraStream:
 
                 self.is_connected = True
                 self.status_message = "Đang kết nối ổn định (High-Speed Native MJPEG)"
-                print(f"[Camera] Đã kết nối camera điện thoại thành công (Native Stream #{worker_id}): {url}")
+                print(f"[Camera] Đã kết nối camera điện thoại thành công (Native Stream #{worker_id})")
                 
                 bytes_buf = b""
                 frame_count = 0
@@ -221,7 +221,7 @@ class VideoCameraStream:
                 if self.worker_id != worker_id:
                     break
                 self.is_connected = False
-                self.status_message = f"Mất kết nối camera ({e}), đang thử lại..."
+                self.status_message = "Mất kết nối camera điện thoại (Wi-Fi), đang thử lại..."
                 time.sleep(1.0)
 
     def _capture_opencv(self, parsed_src, worker_id):
@@ -229,14 +229,14 @@ class VideoCameraStream:
         if self.worker_id != worker_id:
             return
 
-        self.status_message = f"Đang mở camera: {parsed_src}..."
+        self.status_message = "Đang mở nguồn camera..."
         try:
             self.cap = cv2.VideoCapture(parsed_src)
             self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
             self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         except Exception as e:
-            self.status_message = f"Không thể mở nguồn camera: {e}"
+            self.status_message = "Không thể mở nguồn camera"
             self.is_connected = False
             return
 
@@ -257,7 +257,7 @@ class VideoCameraStream:
 
                 if self.cap is None or not self.cap.isOpened():
                     self.is_connected = False
-                    self.status_message = f"Không thể kết nối đến camera '{parsed_src}'"
+                    self.status_message = "Không thể kết nối đến nguồn camera"
                     time.sleep(1.0)
                     continue
 
@@ -316,7 +316,15 @@ class VideoCameraStream:
                             # Nếu phát hiện vi phạm: kích hoạt cảnh báo âm thanh
                             if analysis["has_violation"]:
                                 details = f"Phát hiện {analysis['total_violations']} người không đội mũ bảo hộ!"
-                                alert_manager.trigger_alert(frame_to_process, details)
+                                alert_manager.trigger_alert(
+                                    frame=frame_to_process,
+                                    violation_details=details,
+                                    camera_name="Camera Giám Sát" if not str(self.camera_source).startswith("http") else "Camera Điện Thoại",
+                                    camera_source=str(self.camera_source),
+                                    safe_count=analysis.get("total_safe", 0),
+                                    violation_count=analysis.get("total_violations", 1),
+                                    confidence=analysis.get("max_confidence", 0.0)
+                                )
                     except Exception as e:
                         print(f"[Inference Error]: {e}")
                     finally:
@@ -367,6 +375,7 @@ class VideoCameraStream:
                 "is_configured": self.detector.is_configured(),
                 "should_play_alert": should_play,
                 "alert_event": alert_event,
+                "latest_alert_id": alert_manager.alert_counter,
                 "voice_message": config.ALERT_VOICE_MESSAGE
             }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   Calendar, 
   ArrowLeft, 
@@ -17,6 +17,8 @@ import {
   ExternalLink,
   Layers,
   ChevronRight,
+  ChevronLeft,
+  ChevronDown,
   Sparkles,
   Users,
   Award,
@@ -24,7 +26,10 @@ import {
   FileSpreadsheet,
   AlertCircle,
   HelpCircle,
-  Info
+  Info,
+  Filter,
+  Check,
+  FileText
 } from 'lucide-react'
 
 export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) {
@@ -45,6 +50,9 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
   const [isLoading, setIsLoading] = useState(false)
   const [selectedCameraFilter, setSelectedCameraFilter] = useState('all')
+  const [selectedWorkerFilter, setSelectedWorkerFilter] = useState('all') // 'all' | 'identified' | 'unknown'
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false)
+  const exportDropdownRef = useRef(null)
 
   // State cho DeepFace & Qdrant Worker Identification
   const [isIdentifying, setIsIdentifying] = useState(false)
@@ -109,12 +117,73 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
     }
   }, [selectedDate])
 
+  // Đóng Export Dropdown khi bấm ra ngoài
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (exportDropdownRef.current && !exportDropdownRef.current.contains(e.target)) {
+        setIsExportMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Phím tắt bàn phím (Keyboard Shortcuts)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return
+
+      // Alt + A hoặc A: Kích hoạt tổng hợp AI
+      if ((e.altKey && e.key.toLowerCase() === 'a') || (!e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'a')) {
+        if (!isIdentifying && violations.length > 0) {
+          e.preventDefault()
+          handleIdentifyWorkers()
+        }
+      } 
+      // Alt + K hoặc K: Mở bảng kỷ luật
+      else if ((e.altKey && e.key.toLowerCase() === 'k') || (!e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'k')) {
+        if (auditSummary && (auditSummary.workers?.length > 0 || auditSummary.total_violations > 0)) {
+          e.preventDefault()
+          setIsAuditModalOpen(true)
+        }
+      } 
+      // V: Chuyển đổi Lưới <-> Bảng
+      else if (!e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault()
+        setViewMode(prev => prev === 'grid' ? 'table' : 'grid')
+      } 
+      // R: Làm mới dữ liệu
+      else if (!e.altKey && !e.ctrlKey && e.key.toLowerCase() === 'r') {
+        e.preventDefault()
+        fetchDayData(selectedDate)
+        fetchWorkerSummary(selectedDate)
+      }
+      // Alt + E: Xuất báo cáo ngày
+      else if (e.altKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault()
+        handleExportCSV()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isIdentifying, violations.length, auditSummary, selectedDate])
+
   const handleExportCSV = () => {
     window.location.href = `/api/violations/export-by-date?date=${selectedDate}`
+    setIsExportMenuOpen(false)
   }
 
   const handleExportWorkerAuditCSV = () => {
     window.location.href = `/api/violations/export-worker-audit-csv?date=${selectedDate}`
+    setIsExportMenuOpen(false)
+  }
+
+  // Điều hướng ngày trước / sau
+  const handleShiftDay = (days) => {
+    const d = new Date(selectedDate)
+    d.setDate(d.getDate() + days)
+    setSelectedDate(d.toISOString().split('T')[0])
   }
 
   // Nút hành động: Kích hoạt DeepFace Facial Recognition & Qdrant Vector Matching
@@ -157,30 +226,44 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
     }
   }
 
-  // Lọc theo camera nếu có
+  // Thống kê nhanh danh tính
+  const identifiedViolationsCount = violations.filter(v => v.matched_worker_id).length
+  const unknownViolationsCount = violations.length - identifiedViolationsCount
+
+  // Lọc theo camera và theo danh tính công nhân
   const filteredViolations = violations.filter(v => {
-    if (selectedCameraFilter === 'all') return true
-    return String(v.camera_id) === String(selectedCameraFilter) || v.camera_name === selectedCameraFilter
+    const matchCam = selectedCameraFilter === 'all' 
+      ? true 
+      : (String(v.camera_id) === String(selectedCameraFilter) || v.camera_name === selectedCameraFilter)
+
+    const matchWorker = selectedWorkerFilter === 'all'
+      ? true
+      : selectedWorkerFilter === 'identified'
+        ? !!v.matched_worker_id
+        : !v.matched_worker_id
+
+    return matchCam && matchWorker
   })
 
   // Danh sách camera duy nhất xuất hiện trong ngày
   const uniqueCameras = Array.from(new Set(violations.map(v => v.camera_name || 'Camera Giám Sát')))
 
-  // Thống kê nhanh danh tính
-  const identifiedViolationsCount = violations.filter(v => v.matched_worker_id).length
-
   return (
     <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 py-4 flex-1 animate-fade-in text-slate-800 dark:text-slate-100 transition-colors duration-200">
       
-      {/* Top Action Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200 dark:border-slate-800">
+      {/* ========================================================
+          1. TOP HEADER BAR: Back + Page Title + Date Navigator
+          ======================================================== */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 pb-4 border-b border-slate-200 dark:border-slate-800">
+        
+        {/* Left: Back button & Title */}
         <div className="flex items-center space-x-3">
           <button
             onClick={onBackToLive}
             className="flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-xs font-bold text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-all shadow-sm"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Quay lại Giám Sát Trực Tiếp</span>
+            <span className="hidden sm:inline">Quay lại Giám Sát</span>
           </button>
           
           <div>
@@ -191,77 +274,66 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
                 <span>Hồ Sơ An Toàn</span>
               </span>
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
               Tra cứu hồ sơ kiểm toán vi phạm mũ bảo hộ, đối chiếu hình ảnh bằng chứng công nhân
             </p>
           </div>
         </div>
 
-        {/* Date Selector & Action Buttons */}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Native HTML5 Datepicker */}
+        {/* Right: Date Navigator (Bộ điều hướng ngày gọn gàng & đồng bộ) */}
+        <div className="flex items-center space-x-1 bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+          {/* Nút Ngày trước */}
+          <button
+            onClick={() => handleShiftDay(-1)}
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+            title="Xem ngày trước"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {/* Ô chọn ngày HTML5 Native */}
           <div className="relative">
-            <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Calendar className="w-3.5 h-3.5 text-amber-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input 
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700/80 rounded-xl pl-9 pr-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white focus:outline-none focus:border-amber-500 shadow-sm"
+              className="bg-transparent pl-8 pr-2 py-1 text-xs font-extrabold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
             />
           </div>
 
+          {/* Nút Ngày sau */}
+          <button
+            onClick={() => handleShiftDay(1)}
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+            title="Xem ngày sau"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          {/* Nút Về Hôm Nay (nếu đang ở ngày khác) */}
+          {selectedDate !== getTodayStr() && (
+            <button
+              onClick={() => setSelectedDate(getTodayStr())}
+              className="px-2 py-1 rounded-lg bg-amber-500/15 text-amber-700 dark:text-amber-400 hover:bg-amber-500/25 text-[11px] font-bold transition-colors"
+            >
+              Hôm nay
+            </button>
+          )}
+
+          {/* Nút Tải lại */}
           <button
             onClick={() => {
               fetchDayData(selectedDate)
               fetchWorkerSummary(selectedDate)
             }}
-            className="p-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors shadow-sm"
-            title="Tải lại dữ liệu ngày này"
+            className="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors"
+            title="Làm mới dữ liệu (Phím R)"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-amber-500' : ''}`} />
-          </button>
-
-          {/* Nút Kích Hoạt Nhận Diện Khuôn Mặt AI (DeepFace + Qdrant) */}
-          <button
-            onClick={handleIdentifyWorkers}
-            disabled={isIdentifying || violations.length === 0}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-extrabold transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed group"
-            title="Sử dụng DeepFace & Qdrant quét ảnh bóc tách khuôn mặt và xác định danh tính công nhân vi phạm"
-          >
-            {isIdentifying ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
-                <span>AI Đang Nhận Diện...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-slate-950 transition-transform group-hover:scale-110" />
-                <span>Tổng Hợp Công Nhân Vi Phạm (AI)</span>
-              </>
-            )}
-          </button>
-
-          {/* Nút Xem Bảng Đối Soát Kỷ Luật (nếu đã có dữ liệu) */}
-          {auditSummary && (auditSummary.workers?.length > 0 || auditSummary.total_violations > 0) && (
-            <button
-              onClick={() => setIsAuditModalOpen(true)}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 text-xs font-bold transition-all shadow-sm"
-              title="Mở Bảng Tổng Hợp Kỷ Luật Cá Nhân Trong Ngày"
-            >
-              <Users className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
-              <span>Bảng Kỷ Luật Cá Nhân</span>
-            </button>
-          )}
-
-          <button
-            onClick={handleExportCSV}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-all shadow-sm"
-            title="Tải file Excel/CSV báo cáo của ngày này"
-          >
-            <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>Xuất Báo Cáo Ngày</span>
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-amber-500' : ''}`} />
           </button>
         </div>
+
       </div>
 
       {/* Thông Báo Trạng Thái Notification */}
@@ -293,7 +365,7 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
       )}
 
       {/* Date Quick Filter Pills */}
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 mr-1 flex items-center">
           <Clock className="w-3.5 h-3.5 mr-1" />
           Các ngày có dữ liệu:
@@ -323,7 +395,7 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
       </div>
 
       {/* Daily KPI Bento Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-5">
         
         {/* Card 1: Số Vụ Vi Phạm */}
         <div className="p-4 rounded-2xl bg-white dark:bg-gradient-to-br dark:from-slate-900 dark:to-[#0e1424] border border-red-200 dark:border-red-500/20 shadow-sm">
@@ -406,43 +478,168 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
 
       </div>
 
-      {/* Filter and View Mode Switcher */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-white dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center space-x-2">
-          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Lọc Camera:</span>
-          <select 
-            value={selectedCameraFilter}
-            onChange={(e) => setSelectedCameraFilter(e.target.value)}
-            className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-800 dark:text-white focus:outline-none focus:border-amber-500 shadow-xs"
-          >
-            <option value="all">Tất cả camera ({violations.length})</option>
-            {uniqueCameras.map((cam) => (
-              <option key={cam} value={cam}>{cam}</option>
-            ))}
-          </select>
+      {/* ========================================================
+          2. UNIFIED COMMAND & CONTROL TOOLBAR (THEO UI/UX PRO MAX)
+          Sắp xếp gọn gàng: Lọc bên trái | Nút AI ở giữa | Phím tắt & Chế độ xem bên phải
+          ======================================================== */}
+      <div className="mb-5 p-3 rounded-2xl bg-white dark:bg-[#0b101c] border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+        
+        {/* Phân khu 1: Bộ Lọc Camera & Phân Loại Danh Tính */}
+        <div className="flex flex-wrap items-center gap-2">
+          
+          {/* Lọc Camera */}
+          <div className="flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <Camera className="w-3.5 h-3.5 text-slate-400" />
+            <select 
+              value={selectedCameraFilter}
+              onChange={(e) => setSelectedCameraFilter(e.target.value)}
+              className="bg-transparent text-slate-800 dark:text-white font-medium focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tất cả camera ({violations.length})</option>
+              {uniqueCameras.map((cam) => (
+                <option key={cam} value={cam}>{cam}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Lọc Theo Trạng Thái Danh Tính */}
+          <div className="flex items-center space-x-1.5 bg-slate-50 dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select
+              value={selectedWorkerFilter}
+              onChange={(e) => setSelectedWorkerFilter(e.target.value)}
+              className="bg-transparent text-slate-800 dark:text-white font-medium focus:outline-none cursor-pointer"
+            >
+              <option value="all">Tất cả hồ sơ ({violations.length})</option>
+              <option value="identified">🟢 Đã định danh ({identifiedViolationsCount})</option>
+              <option value="unknown">🔴 Chưa định danh ({unknownViolationsCount})</option>
+            </select>
+          </div>
+
         </div>
 
-        <div className="flex items-center space-x-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+        {/* Phân khu 2: Nút Hành Động Trọng Tâm (Primary Hero Button) */}
+        <div className="flex items-center">
           <button
-            onClick={() => setViewMode('grid')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
-              viewMode === 'grid' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
+            onClick={handleIdentifyWorkers}
+            disabled={isIdentifying || violations.length === 0}
+            className="w-full sm:w-auto flex items-center justify-center space-x-2 px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-black transition-all shadow-md shadow-amber-500/25 disabled:opacity-50 disabled:cursor-not-allowed group active:scale-[0.98]"
+            title="Quét đối soát ảnh vi phạm bằng DeepFace & Qdrant 512D (Phím tắt: A hoặc Alt+A)"
           >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span>Lưới Ảnh (Gallery)</span>
-          </button>
-
-          <button
-            onClick={() => setViewMode('table')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center space-x-1.5 ${
-              viewMode === 'table' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-            }`}
-          >
-            <TableIcon className="w-3.5 h-3.5" />
-            <span>Bảng Kiểm Toán</span>
+            {isIdentifying ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                <span>AI Đang Quét Khuôn Mặt...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-slate-950 transition-transform group-hover:scale-125" />
+                <span>Tổng Hợp Công Nhân Vi Phạm (AI)</span>
+                <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.2 rounded bg-black/20 text-[10px] font-mono text-slate-950 font-bold">
+                  Alt+A
+                </kbd>
+              </>
+            )}
           </button>
         </div>
+
+        {/* Phân khu 3: Nhóm Phím Tắt Thao Tác Phụ & Chuyển Chế Độ Xem */}
+        <div className="flex flex-wrap items-center gap-2">
+          
+          {/* Nút Xem Bảng Kỷ Luật Cá Nhân */}
+          <button
+            onClick={() => setIsAuditModalOpen(true)}
+            disabled={!auditSummary || (auditSummary.workers?.length === 0 && auditSummary.total_violations === 0)}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-xs ${
+              auditSummary && auditSummary.workers?.length > 0
+                ? 'bg-cyan-500/15 hover:bg-cyan-500/25 border-cyan-500/30 text-cyan-700 dark:text-cyan-300'
+                : 'bg-slate-100 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 cursor-not-allowed'
+            }`}
+            title="Xem báo cáo xếp hạng kỷ luật công nhân theo ngày (Phím tắt: K hoặc Alt+K)"
+          >
+            <Award className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+            <span>Bảng Kỷ Luật</span>
+            {auditSummary?.workers?.length > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-cyan-500/25 text-cyan-800 dark:text-cyan-200 font-mono text-[10px]">
+                {auditSummary.workers.length}
+              </span>
+            )}
+            <kbd className="hidden xl:inline-block px-1 rounded bg-black/10 dark:bg-white/10 text-[9px] font-mono">
+              Alt+K
+            </kbd>
+          </button>
+
+          {/* Dropdown Gom Gọn: Xuất Báo Cáo (CSV) */}
+          <div className="relative" ref={exportDropdownRef}>
+            <button
+              onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-all shadow-xs"
+              title="Tải các loại báo cáo kiểm toán định dạng CSV / Excel"
+            >
+              <Download className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>Xuất Báo Cáo</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Menu Thả Xuống của Nút Xuất Báo Cáo */}
+            {isExportMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl py-1.5 z-30 animate-fade-in text-xs">
+                <button
+                  onClick={handleExportCSV}
+                  className="w-full text-left px-3.5 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between text-slate-700 dark:text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center space-x-2">
+                    <FileText className="w-4 h-4 text-emerald-500" />
+                    <span className="font-semibold">Báo Cáo Vi Phạm Ngày</span>
+                  </div>
+                  <kbd className="text-[10px] font-mono text-slate-400">Alt+E</kbd>
+                </button>
+
+                <button
+                  onClick={handleExportWorkerAuditCSV}
+                  className="w-full text-left px-3.5 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between text-slate-700 dark:text-slate-200 transition-colors"
+                >
+                  <div className="flex items-center space-x-2">
+                    <FileSpreadsheet className="w-4 h-4 text-cyan-500" />
+                    <span className="font-semibold">Báo Cáo Kỷ Luật AI</span>
+                  </div>
+                  <span className="text-[10px] text-cyan-500 font-bold">DeepFace</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Segmented View Mode Switcher (Lưới Ảnh / Bảng Kiểm Toán) */}
+          <div className="flex items-center space-x-0.5 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+                viewMode === 'grid' 
+                  ? 'bg-amber-500 text-slate-950 shadow-sm' 
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Chế độ lưới ảnh (Phím V)"
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Lưới</span>
+            </button>
+
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-1.5 sm:px-2.5 sm:py-1 rounded-lg text-xs font-bold transition-all flex items-center space-x-1 ${
+                viewMode === 'table' 
+                  ? 'bg-amber-500 text-slate-950 shadow-sm' 
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+              title="Chế độ bảng kiểm toán (Phím V)"
+            >
+              <TableIcon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Bảng</span>
+            </button>
+          </div>
+
+        </div>
+
       </div>
 
       {/* Main Content Area: Gallery Grid vs Table View */}
@@ -452,10 +649,10 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <h3 className="text-base font-bold text-slate-900 dark:text-white">
-            Không Có Vi Phạm Nào Trong Ngày {selectedDate}
+            Không Có Vi Phạm Nào Trong Bộ Lọc Ngày {selectedDate}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto mt-1">
-            Toàn bộ công nhân bước vào công trường đều tuân thủ đội mũ bảo hộ hợp lệ 100%. Hãy chọn một ngày khác có vi phạm trong danh sách phía trên!
+            Toàn bộ công nhân bước vào công trường đều tuân thủ đội mũ bảo hộ hợp lệ 100% hoặc không có vi phạm nào khớp với bộ lọc hiện tại.
           </p>
         </div>
       ) : viewMode === 'grid' ? (

@@ -256,6 +256,7 @@ def api_status():
     status_info["roboflow_version"] = detector.version
     status_info["confidence_threshold"] = detector.confidence_threshold
     status_info["cooldown_seconds"] = alert_manager.cooldown
+    status_info["latest_alert_id"] = alert_manager.alert_counter
     return status_info
 
 @app.get("/api/history")
