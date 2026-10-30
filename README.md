@@ -66,6 +66,26 @@ Tại các công trường xây dựng, nhà máy sản xuất và khu chế xu�
 
 ---
 
+## 📊 Kết Quả Huấn Luyện Mô Hình RF-DETR (Model Evaluation & Metrics)
+
+Mô hình **Roboflow RF-DETR Object Detection (Small)** được huấn luyện và tinh chỉnh chuyên sâu (Fine-tuned) trên bộ dữ liệu **7,533 hình ảnh** công trường xây dựng thực tế (`tuan1s-workspace/hardhat3-dptal-1-rfdetr-small-t1`). Kết quả đánh giá trên tập kiểm thử độc lập (**Test Set**) đạt độ chính xác xuất sắc và nằm ở điểm tối ưu nhất đồ thị: **Lowest Latency & Highest mAP@50:95**:
+
+<div align="center">
+
+| Chỉ Số Đánh Giá (Metric) | Kết Quả Đạt Được | Ý Nghĩa Đánh Giá Thực Nghiệm |
+| :--- | :---: | :--- |
+| 🎯 **mAP@50** | **98.3%** | Độ chính xác trung bình tại ngưỡng IoU 0.5 (nhận diện vi phạm cực kỳ chuẩn xác) |
+| 🔍 **Precision (Độ chuẩn xác)** | **95.9%** | Tỷ lệ phát hiện đúng cao, triệt tiêu các cảnh báo giả mạo (False Positives) |
+| 📌 **Recall (Độ bao phủ)** | **96.3%** | Bắt trọn vẹn 96.3% các trường hợp vi phạm, giảm thiểu tối đa bỏ sót (False Negatives) |
+| ⚖️ **F1-Score** | **95.7%** | Chỉ số đo lường tổng thể cân bằng tối ưu giữa Precision và Recall |
+| ⚡ **Compute Latency (Cloud API)**| **8.3 ms** | Thời gian tính toán mô hình mạng nơ-ron trên hạ tầng Serverless Cloud |
+
+</div>
+
+![Biểu Đồ Đánh Giá Mô Hình RF-DETR Roboflow](docs/model_evaluation.jpg)
+
+---
+
 ## 🏗️ Kiến Trúc Hệ Thống (System & Software Architecture)
 
 ### Sơ Đồ Kiến Trúc Phân Tầng (Layered Architecture):
