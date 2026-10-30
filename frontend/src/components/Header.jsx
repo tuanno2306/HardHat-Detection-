@@ -61,20 +61,32 @@ export default function Header({
           <div>
             <div className="flex items-center space-x-2">
               <h2 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white tracking-tight uppercase">
-                {currentView === 'home' ? 'Giám Sát Trực Tiếp' : 'Nhật Ký Vi Phạm'}
+                {currentView === 'home' 
+                  ? 'Giám Sát Trực Tiếp' 
+                  : currentView === 'workers' 
+                    ? 'Hồ Sơ Công Nhân' 
+                    : 'Nhật Ký Vi Phạm'}
               </h2>
               <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${
                 currentView === 'home'
                   ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'
-                  : 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30'
+                  : currentView === 'workers'
+                    ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30'
+                    : 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30'
               }`}>
-                {currentView === 'home' ? 'Real-time Feed' : 'Hồ Sơ Kiểm Toán'}
+                {currentView === 'home' 
+                  ? 'Real-time Feed' 
+                  : currentView === 'workers' 
+                    ? 'Qdrant Vector DB' 
+                    : 'Hồ Sơ Kiểm Toán'}
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
               {currentView === 'home' 
                 ? 'Nhận diện và cảnh báo vi phạm mũ bảo hộ thời gian thực' 
-                : 'Tra cứu lịch sử vi phạm, thống kê tỷ lệ tuân thủ và đối chiếu ảnh bằng chứng'}
+                : currentView === 'workers'
+                  ? 'Quản lý nhân sự, đăng ký ảnh chân dung & buồng quét khuôn mặt AI DeepFace'
+                  : 'Tra cứu lịch sử vi phạm, thống kê tỷ lệ tuân thủ và đối chiếu ảnh bằng chứng'}
             </p>
           </div>
         </div>

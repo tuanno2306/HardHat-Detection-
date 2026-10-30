@@ -117,6 +117,16 @@ class UpdateSettingsRequest(BaseModel):
     confidence: Optional[Union[str, int, float]] = None
     cooldown: Optional[Union[str, int]] = None
 
+class WorkerRegisterJSONRequest(BaseModel):
+    employee_code: str
+    full_name: str
+    department: Optional[str] = "Chưa phân ban"
+    phone: Optional[str] = None
+    image_base64: str
+
+class FaceScanProbeRequest(BaseModel):
+    image_base64: str
+
 # ==========================================
 # VIDEO FEED STREAMING (MJPEG)
 # ==========================================
@@ -455,6 +465,256 @@ def api_test_alert():
         confidence=0.99
     )
     return {"success": True, "triggered": triggered, "message": "Đã kích hoạt thử nghiệm âm thanh!"}
+
+# ==========================================
+# QUẢN LÝ CÔNG NHÂN & NHẬN DIỆN KHUÔN MẶT (DEEPFACE + QDRANT)
+# ==========================================
+
+WORKERS_STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static", "workers")
+os.makedirs(WORKERS_STATIC_DIR, exist_ok=True)
+
+@app.get("/api/qdrant/status")
+def api_get_qdrant_status():
+    """Lấy trạng thái kết nối và số vector khuôn mặt trong Qdrant"""
+    return qdrant_service.get_status()
+
+@app.get("/api/workers")
+def api_get_workers():
+    """Lấy danh sách tất cả công nhân đã đăng ký khuôn mặt"""
+    workers = database.get_workers(active_only=True)
+    # Gắn URL ảnh đại diện cho frontend
+    result = []
+    for w in workers:
+        item = dict(w)
+        if item.get("avatar_path"):
+            item["avatar_url"] = f"/api/workers/avatar/{item['avatar_path']}"
+        else:
+            item["avatar_url"] = None
+        result.append(item)
+    return result
+
+@app.get("/api/workers/avatar/{filename}")
+def api_get_worker_avatar(filename: str):
+    """Phục vụ ảnh đại diện công nhân"""
+    file_path = os.path.join(WORKERS_STATIC_DIR, filename)
+    if os.path.exists(file_path):
+        return FileResponse(file_path, media_type="image/jpeg")
+    return Response(status_code=404, content="Không tìm thấy ảnh đại diện")
+
+@app.post("/api/workers/scan-probe")
+def api_worker_scan_probe(req: FaceScanProbeRequest):
+    """
+    Thử nghiệm/định vị khuôn mặt trực tiếp theo thời gian thực (phục vụ buồng quét mặt)
+    """
+    try:
+        data = req.image_base64
+        if "," in data:
+            data = data.split(",", 1)[1]
+        img_bytes = base64.b64decode(data)
+        res = deepface_service.probe_face_alignment(img_bytes)
+        return res
+    except Exception as e:
+        return {"detected": False, "status": "error", "advice": f"Lỗi xử lý hình ảnh: {str(e)}"}
+
+@app.post("/api/workers/register")
+async def api_register_worker(
+    full_name: str = Form(...),
+    employee_code: str = Form(...),
+    department: Optional[str] = Form("Chưa phân ban"),
+    phone: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    image_base64: Optional[str] = Form(None)
+):
+    """
+    Đăng ký hồ sơ công nhân mới và lưu vector khuôn mặt vào Qdrant:
+    Chấp nhận cả 2 hình thức: Tải file ảnh hoặc Chuỗi ảnh Base64 từ Camera quét mặt.
+    """
+    full_name = full_name.strip()
+    employee_code = employee_code.strip().upper()
+    department = (department or "Chưa phân ban").strip()
+    phone = phone.strip() if phone else None
+
+    if not full_name or not employee_code:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập đầy đủ Họ tên và Mã công nhân!")
+
+    # Kiểm tra mã công nhân trùng lặp
+    existing = database.get_worker_by_code(employee_code)
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Mã công nhân '{employee_code}' đã tồn tại trong hệ thống!")
+
+    # Lấy dữ liệu bytes của ảnh
+    img_bytes = None
+    if file and file.filename:
+        img_bytes = await file.read()
+    elif image_base64:
+        raw_b64 = image_base64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        img_bytes = base64.b64decode(raw_b64)
+    else:
+        raise HTTPException(status_code=400, detail="Vui lòng tải ảnh lên hoặc quét mặt bằng camera!")
+
+    # Trích xuất vector khuôn mặt 512D bằng DeepFace
+    emb_res = deepface_service.extract_face_embedding(img_bytes)
+    if not emb_res.get("success"):
+        raise HTTPException(status_code=400, detail=emb_res.get("message", "Không thể nhận diện khuôn mặt trong ảnh!"))
+
+    vector = emb_res["embedding"]
+    
+    # Lưu ảnh đại diện cục bộ và MinIO
+    avatar_filename = f"avatar_{employee_code}_{int(time.time())}.jpg"
+    local_avatar_path = os.path.join(WORKERS_STATIC_DIR, avatar_filename)
+    with open(local_avatar_path, "wb") as f:
+        f.write(img_bytes)
+
+    # Đưa ảnh lên MinIO S3
+    try:
+        minio_storage.upload_violation_image(img_bytes, avatar_filename)
+    except Exception as e:
+        print(f"[MinIO Warning] Không thể upload avatar lên MinIO: {e}")
+
+    # Lưu thông tin vào PostgreSQL
+    worker = database.create_worker(
+        employee_code=employee_code,
+        full_name=full_name,
+        department=department,
+        phone=phone,
+        avatar_path=avatar_filename,
+        qdrant_point_id=employee_code
+    )
+
+    worker_id = worker["id"]
+
+    # Đưa vector vào Qdrant Vector Database
+    payload = {
+        "worker_id": worker_id,
+        "employee_code": employee_code,
+        "full_name": full_name,
+        "department": department,
+        "avatar_path": avatar_filename,
+        "created_at": datetime.now().isoformat()
+    }
+    
+    upserted = qdrant_service.upsert_worker(worker_id=worker_id, vector=vector, payload=payload)
+    if not upserted:
+        print(f"[Qdrant Warning] Chưa thể ghi vector công nhân {worker_id} vào Qdrant!")
+
+    return {
+        "success": True,
+        "message": f"Đăng ký công nhân '{full_name}' ({employee_code}) thành công!",
+        "worker": {
+            "id": worker_id,
+            "employee_code": employee_code,
+            "full_name": full_name,
+            "department": department,
+            "avatar_url": f"/api/workers/avatar/{avatar_filename}",
+            "qdrant_indexed": upserted
+        }
+    }
+
+@app.delete("/api/workers/{worker_id}")
+def api_delete_worker(worker_id: int):
+    """Xóa công nhân khỏi hệ thống và gỡ vector khỏi Qdrant"""
+    deleted = database.delete_worker(worker_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Không tìm thấy công nhân cần xóa!")
+    
+    # Xóa vector khỏi Qdrant
+    qdrant_service.delete_worker(worker_id)
+    return {"success": True, "message": f"Đã xóa công nhân #{worker_id} thành công!"}
+
+@app.post("/api/violations/identify-daily")
+def api_identify_daily_violations(date: str):
+    """
+    Nút 'Tổng Hợp Nhân Viên Vi Phạm Hôm Nay':
+    Tự động duyệt qua toàn bộ ảnh vi phạm trong ngày chỉ định, sử dụng DeepFace
+    bóc tách khuôn mặt và truy vấn Qdrant để xác định chính xác danh tính từng nhân viên.
+    """
+    date_str = date.strip()
+    violations = database.get_violations_by_date(date_str, limit=500, offset=0)
+    
+    if not violations:
+        return {
+            "success": True,
+            "date": date_str,
+            "total_processed": 0,
+            "message": f"Không có vi phạm nào trong ngày {date_str} để đối soát.",
+            "summary": database.get_daily_worker_violation_summary(date_str)
+        }
+
+    matched_count = 0
+
+    for v in violations:
+        v_id = v["id"]
+        snapshot_filename = v.get("snapshot_path")
+        if not snapshot_filename:
+            continue
+
+        # Lấy dữ liệu ảnh (ưu tiên MinIO, fallback đĩa cục bộ)
+        img_bytes = minio_storage.get_image_bytes(snapshot_filename)
+        if not img_bytes:
+            continue
+
+        # DeepFace phát hiện tất cả các khuôn mặt trong ảnh vi phạm
+        faces = deepface_service.detect_all_faces_in_violation(img_bytes)
+        if not faces:
+            # Nếu detector không thấy mặt góc rộng, thử extract_face_embedding fallback
+            single = deepface_service.extract_face_embedding(img_bytes)
+            if single.get("success"):
+                faces = [single]
+
+        best_match = None
+        for face in faces:
+            vector = face.get("embedding")
+            if not vector:
+                continue
+            
+            # Tìm kiếm trong Qdrant với ngưỡng Cosine similarity >= 0.50
+            matches = qdrant_service.search_worker(vector=vector, limit=1, score_threshold=0.50)
+            if matches:
+                top = matches[0]
+                if best_match is None or top["score"] > best_match["score"]:
+                    best_match = top
+
+        if best_match:
+            matched_worker_id = best_match["worker_id"]
+            matched_name = best_match["payload"].get("full_name") or f"Công nhân #{matched_worker_id}"
+            similarity = best_match["score"]
+            database.update_violation_matched_worker(v_id, matched_worker_id, matched_name, similarity)
+            matched_count += 1
+
+    summary = database.get_daily_worker_violation_summary(date_str)
+    return {
+        "success": True,
+        "date": date_str,
+        "total_processed": len(violations),
+        "matched_violations": matched_count,
+        "summary": summary
+    }
+
+@app.get("/api/violations/summary-by-worker")
+def api_get_worker_violation_summary(date: str):
+    """Lấy dữ liệu tổng hợp kỷ luật theo từng công nhân của một ngày"""
+    summary = database.get_daily_worker_violation_summary(date.strip())
+    # Gắn URL ảnh cho avatar
+    if summary and summary.get("workers"):
+        for w in summary["workers"]:
+            if w.get("avatar_path"):
+                w["avatar_url"] = f"/api/workers/avatar/{w['avatar_path']}"
+            else:
+                w["avatar_url"] = None
+    return {"success": True, "summary": summary}
+
+@app.get("/api/violations/export-worker-audit-csv")
+def api_export_worker_violation_csv(date: str):
+    """Xuất báo cáo kỷ luật danh sách công nhân vi phạm theo ngày dạng Excel CSV"""
+    csv_content = database.export_worker_violation_summary_csv(date.strip())
+    filename = f"bao_cao_ky_luat_cong_nhan_{date.strip()}.csv"
+    return Response(
+        content=csv_content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
 
 # ==========================================
 # PHỤC VỤ STATIC ASSETS & REACT SPA

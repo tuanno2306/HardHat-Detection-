@@ -2,6 +2,7 @@ import React from 'react'
 import { 
   Home, 
   ShieldAlert, 
+  Users,
   Volume2, 
   VolumeX, 
   Maximize, 
@@ -27,6 +28,7 @@ export default function Sidebar({
   onOpenSettings,
   toggleFullscreen,
   violationCount = 0,
+  workerCount = 0,
   theme = 'light',
   toggleTheme
 }) {
@@ -53,6 +55,14 @@ export default function Sidebar({
       icon: ShieldAlert,
       badge: violationCount > 0 ? violationCount : null,
       badgeColor: 'bg-red-500/15 text-red-600 dark:text-red-400 border-red-500/30'
+    },
+    {
+      id: 'workers',
+      label: 'Workers',
+      sublabel: 'Công nhân & Quét mặt AI',
+      icon: Users,
+      badge: workerCount > 0 ? workerCount : null,
+      badgeColor: 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30'
     }
   ]
 

@@ -10,9 +10,11 @@ import SettingsModal from './components/SettingsModal'
 import LightboxModal from './components/LightboxModal'
 import LoginModal from './components/LoginModal'
 import DailyViolationsPage from './components/DailyViolationsPage'
+import WorkersPage from './components/WorkersPage'
 
 export default function App() {
-  const [currentView, setCurrentView] = useState('home') // 'home' | 'violations'
+  const [currentView, setCurrentView] = useState('home') // 'home' | 'violations' | 'workers'
+  const [workerCount, setWorkerCount] = useState(0)
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('hardhat_theme') || 'light' // Default to light/bright per user request
   })
@@ -98,8 +100,22 @@ export default function App() {
     }
   }
 
+  // Lấy danh sách công nhân để đếm số lượng
+  const fetchWorkerCount = async () => {
+    try {
+      const res = await fetch('/api/workers')
+      if (res.ok) {
+        const data = await res.json()
+        setWorkerCount((data || []).length)
+      }
+    } catch (e) {
+      console.warn("Lỗi fetch workers count:", e)
+    }
+  }
+
   // Kiểm tra phiên đăng nhập hiện tại từ server
   useEffect(() => {
+    fetchWorkerCount()
     const checkMe = async () => {
       try {
         const res = await fetch('/api/auth/me')
@@ -291,6 +307,7 @@ export default function App() {
         onOpenSettings={() => setIsSettingsOpen(true)}
         toggleFullscreen={toggleFullscreen}
         violationCount={history.length}
+        workerCount={workerCount}
         theme={theme}
         toggleTheme={toggleTheme}
       />
@@ -318,6 +335,14 @@ export default function App() {
             <DailyViolationsPage 
               onBackToLive={() => setCurrentView('home')}
               onSelectSnapshot={(url) => setSelectedSnapshot(url)}
+            />
+          </div>
+        ) : currentView === 'workers' ? (
+          /* Workers Management & AI Face Scan */
+          <div className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full">
+            <WorkersPage 
+              onBackToLive={() => setCurrentView('home')}
+              onWorkerCountChange={(count) => setWorkerCount(count)}
             />
           </div>
         ) : (
