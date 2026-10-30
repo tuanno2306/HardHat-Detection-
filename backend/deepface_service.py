@@ -25,9 +25,13 @@ class DeepFaceService:
         self.vector_size = 512
         logger.info(f"Khởi tạo DeepFaceService với model: {self.model_name}, detector: {self.primary_detector}")
 
-    def _prepare_image(self, image_input: Union[str, bytes, np.ndarray]) -> Optional[np.ndarray]:
+    def _prepare_image(self, image_input: Union[str, bytes, np.ndarray, tuple]) -> Optional[np.ndarray]:
         """Chuẩn hóa mọi dạng đầu vào thành BGR numpy array chuẩn của OpenCV"""
         try:
+            if isinstance(image_input, (tuple, list)):
+                image_input = image_input[0]
+            if image_input is None:
+                return None
             if isinstance(image_input, str):
                 if not os.path.exists(image_input):
                     logger.warning(f"File ảnh không tồn tại: {image_input}")

@@ -16,7 +16,15 @@ import {
   RefreshCw,
   ExternalLink,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
+  Users,
+  Award,
+  X,
+  FileSpreadsheet,
+  AlertCircle,
+  HelpCircle,
+  Info
 } from 'lucide-react'
 
 export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) {
@@ -37,6 +45,12 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
   const [viewMode, setViewMode] = useState('grid') // 'grid' | 'table'
   const [isLoading, setIsLoading] = useState(false)
   const [selectedCameraFilter, setSelectedCameraFilter] = useState('all')
+
+  // State cho DeepFace & Qdrant Worker Identification
+  const [isIdentifying, setIsIdentifying] = useState(false)
+  const [auditSummary, setAuditSummary] = useState(null)
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
+  const [statusNotification, setStatusNotification] = useState(null)
 
   // 1. Tải danh sách các ngày có dữ liệu vi phạm
   const fetchAvailableDates = async () => {
@@ -69,6 +83,21 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
     }
   }
 
+  // 3. Tải trước tổng hợp kỷ luật công nhân theo ngày (nếu có)
+  const fetchWorkerSummary = async (dateStr) => {
+    try {
+      const res = await fetch(`/api/violations/summary-by-worker?date=${dateStr}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.summary) {
+          setAuditSummary(data.summary)
+        }
+      }
+    } catch (e) {
+      console.warn("Lỗi fetch worker summary:", e)
+    }
+  }
+
   useEffect(() => {
     fetchAvailableDates()
   }, [])
@@ -76,11 +105,56 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
   useEffect(() => {
     if (selectedDate) {
       fetchDayData(selectedDate)
+      fetchWorkerSummary(selectedDate)
     }
   }, [selectedDate])
 
   const handleExportCSV = () => {
     window.location.href = `/api/violations/export-by-date?date=${selectedDate}`
+  }
+
+  const handleExportWorkerAuditCSV = () => {
+    window.location.href = `/api/violations/export-worker-audit-csv?date=${selectedDate}`
+  }
+
+  // Nút hành động: Kích hoạt DeepFace Facial Recognition & Qdrant Vector Matching
+  const handleIdentifyWorkers = async () => {
+    setIsIdentifying(true)
+    setStatusNotification({
+      type: 'info',
+      message: 'Đang dùng DeepFace bóc tách khuôn mặt & truy vấn Qdrant Vector DB (512 chiều)...'
+    })
+
+    try {
+      const res = await fetch(`/api/violations/identify-daily?date=${selectedDate}`, {
+        method: 'POST'
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        setAuditSummary(data.summary)
+        await fetchDayData(selectedDate)
+        setIsAuditModalOpen(true)
+        setStatusNotification({
+          type: 'success',
+          message: `Đối soát AI hoàn tất: Đã nhận diện ${data.matched_violations}/${data.total_processed} lượt vi phạm!`
+        })
+      } else {
+        setStatusNotification({
+          type: 'error',
+          message: data.message || 'Không thể nhận diện danh tính công nhân.'
+        })
+      }
+    } catch (e) {
+      console.error("Lỗi đối soát khuôn mặt DeepFace:", e)
+      setStatusNotification({
+        type: 'error',
+        message: 'Lỗi kết nối máy chủ khi nhận diện khuôn mặt: ' + e.message
+      })
+    } finally {
+      setIsIdentifying(false)
+      setTimeout(() => setStatusNotification(null), 6000)
+    }
   }
 
   // Lọc theo camera nếu có
@@ -91,6 +165,9 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
 
   // Danh sách camera duy nhất xuất hiện trong ngày
   const uniqueCameras = Array.from(new Set(violations.map(v => v.camera_name || 'Camera Giám Sát')))
+
+  // Thống kê nhanh danh tính
+  const identifiedViolationsCount = violations.filter(v => v.matched_worker_id).length
 
   return (
     <div className="max-w-7xl mx-auto w-full px-3 sm:px-4 py-4 flex-1 animate-fade-in text-slate-800 dark:text-slate-100 transition-colors duration-200">
@@ -120,7 +197,7 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
           </div>
         </div>
 
-        {/* Date Selector & CSV Export */}
+        {/* Date Selector & Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Native HTML5 Datepicker */}
           <div className="relative">
@@ -134,12 +211,47 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
           </div>
 
           <button
-            onClick={() => fetchDayData(selectedDate)}
+            onClick={() => {
+              fetchDayData(selectedDate)
+              fetchWorkerSummary(selectedDate)
+            }}
             className="p-2 rounded-xl bg-white hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors shadow-sm"
             title="Tải lại dữ liệu ngày này"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-amber-500' : ''}`} />
           </button>
+
+          {/* Nút Kích Hoạt Nhận Diện Khuôn Mặt AI (DeepFace + Qdrant) */}
+          <button
+            onClick={handleIdentifyWorkers}
+            disabled={isIdentifying || violations.length === 0}
+            className="flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-extrabold transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed group"
+            title="Sử dụng DeepFace & Qdrant quét ảnh bóc tách khuôn mặt và xác định danh tính công nhân vi phạm"
+          >
+            {isIdentifying ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-slate-950" />
+                <span>AI Đang Nhận Diện...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-slate-950 transition-transform group-hover:scale-110" />
+                <span>Tổng Hợp Công Nhân Vi Phạm (AI)</span>
+              </>
+            )}
+          </button>
+
+          {/* Nút Xem Bảng Đối Soát Kỷ Luật (nếu đã có dữ liệu) */}
+          {auditSummary && (auditSummary.workers?.length > 0 || auditSummary.total_violations > 0) && (
+            <button
+              onClick={() => setIsAuditModalOpen(true)}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-700 dark:text-cyan-300 text-xs font-bold transition-all shadow-sm"
+              title="Mở Bảng Tổng Hợp Kỷ Luật Cá Nhân Trong Ngày"
+            >
+              <Users className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+              <span>Bảng Kỷ Luật Cá Nhân</span>
+            </button>
+          )}
 
           <button
             onClick={handleExportCSV}
@@ -151,6 +263,34 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
           </button>
         </div>
       </div>
+
+      {/* Thông Báo Trạng Thái Notification */}
+      {statusNotification && (
+        <div className={`mb-4 px-4 py-3 rounded-2xl border flex items-center justify-between text-xs font-medium animate-fade-in ${
+          statusNotification.type === 'success'
+            ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+            : statusNotification.type === 'error'
+              ? 'bg-red-500/15 border-red-500/30 text-red-700 dark:text-red-300'
+              : 'bg-amber-500/15 border-amber-500/30 text-amber-700 dark:text-amber-300'
+        }`}>
+          <div className="flex items-center space-x-2">
+            {statusNotification.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+            ) : statusNotification.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-amber-500 animate-spin shrink-0" />
+            )}
+            <span>{statusNotification.message}</span>
+          </div>
+          <button 
+            onClick={() => setStatusNotification(null)}
+            className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Date Quick Filter Pills */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -197,8 +337,13 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
             <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">{kpi.total_violations}</span>
             <span className="text-xs text-slate-500 dark:text-slate-400">lượt vi phạm</span>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500 font-medium">
-            Ghi nhận {kpi.total_incidents} thời điểm phát hiện
+          <div className="mt-1 text-[11px] text-slate-500 font-medium flex items-center justify-between">
+            <span>{kpi.total_incidents} thời điểm</span>
+            {identifiedViolationsCount > 0 && (
+              <span className="text-cyan-600 dark:text-cyan-400 font-bold">
+                {identifiedViolationsCount} đã định danh
+              </span>
+            )}
           </div>
         </div>
 
@@ -314,7 +459,7 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
           </p>
         </div>
       ) : viewMode === 'grid' ? (
-        /* DẠNG 1: GALLERY GRID VỚI ẢNH BẰNG CHỨNG LỚN */
+        /* DẠNG 1: GALLERY GRID VỚI ẢNH BẰNG CHỨNG LỚN & THẺ ĐỊNH DANH CÔNG NHÂN */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {filteredViolations.map((v, idx) => {
             const imageUrl = v.snapshot_path 
@@ -324,7 +469,11 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
             return (
               <div 
                 key={v.id || idx}
-                className="bg-white dark:bg-[#0b101c] rounded-2xl border border-slate-200 dark:border-slate-800/90 overflow-hidden shadow-sm hover:shadow-md hover:border-red-400 dark:hover:border-red-500/50 transition-all flex flex-col justify-between group"
+                className={`bg-white dark:bg-[#0b101c] rounded-2xl border overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group ${
+                  v.matched_worker_id
+                    ? 'border-cyan-500/40 dark:border-cyan-500/30 hover:border-cyan-400'
+                    : 'border-slate-200 dark:border-slate-800/90 hover:border-red-400 dark:hover:border-red-500/50'
+                }`}
               >
                 {/* Image Snapshot with Evidence Badge */}
                 <div className="relative aspect-video bg-slate-900 overflow-hidden">
@@ -389,6 +538,46 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
                     <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1 line-clamp-2">
                       {v.details || 'Không đội mũ bảo hộ khi bước vào công trường'}
                     </p>
+
+                    {/* KHỐI NHẬN DIỆN DANH TÍNH CÔNG NHÂN (DEEPFACE & QDRANT) */}
+                    {v.matched_worker_name ? (
+                      <div className="mt-2.5 p-2 rounded-xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/30 flex items-center space-x-2.5">
+                        <div className="w-8 h-8 rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-800 shrink-0 border border-cyan-500/40">
+                          {v.matched_worker_avatar ? (
+                            <img 
+                              src={`/api/workers/avatar/${v.matched_worker_avatar}`} 
+                              alt={v.matched_worker_name} 
+                              className="w-full h-full object-cover" 
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-cyan-500">
+                              <User className="w-4 h-4" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="overflow-hidden flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-extrabold text-cyan-800 dark:text-cyan-300 truncate">
+                              {v.matched_worker_name}
+                            </span>
+                            <span className="text-[10px] font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded border border-emerald-500/20">
+                              {v.match_similarity_pct || 90}% khớp
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                            {v.matched_worker_code ? `Mã: ${v.matched_worker_code}` : ''} {v.matched_worker_dept ? `• ${v.matched_worker_dept}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-2.5 px-2.5 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-[10px] text-slate-500 dark:text-slate-400 flex items-center justify-between">
+                        <span className="flex items-center space-x-1">
+                          <HelpCircle className="w-3 h-3 text-slate-400" />
+                          <span>Chưa xác định danh tính</span>
+                        </span>
+                        <span className="text-slate-400 text-[9px] font-mono">Bấm Tổng Hợp AI</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Footer: Cán bộ trực ca ghi nhận */}
@@ -405,7 +594,7 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
           })}
         </div>
       ) : (
-        /* DẠNG 2: BẢNG KIỂM TOÁN CHUYÊN NGHIỆP */
+        /* DẠNG 2: BẢNG KIỂM TOÁN CHUYÊN NGHIỆP CÓ CỘT ĐỊNH DANH CÔNG NHÂN */
         <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0b101c] shadow-sm">
           <table className="w-full text-left text-xs text-slate-700 dark:text-slate-300">
             <thead className="bg-slate-100 dark:bg-slate-950 text-slate-600 dark:text-slate-400 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
@@ -413,8 +602,9 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
                 <th className="py-3 px-4">STT</th>
                 <th className="py-3 px-4">Thời Gian</th>
                 <th className="py-3 px-4">Ảnh Bằng Chứng</th>
+                <th className="py-3 px-4">Công Nhân Vi Phạm (AI)</th>
                 <th className="py-3 px-4">Vị Trí / Camera</th>
-                <th className="py-3 px-4">Số Người Vi Phạm</th>
+                <th className="py-3 px-4">Số Người</th>
                 <th className="py-3 px-4">Cán Bộ Trực Ca</th>
                 <th className="py-3 px-4">Độ Tin Cậy</th>
                 <th className="py-3 px-4">Mô Tả Vi Phạm</th>
@@ -446,6 +636,36 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
                         <span className="text-slate-400 font-mono text-[10px]">Trống</span>
                       )}
                     </td>
+                    <td className="py-3 px-4">
+                      {v.matched_worker_name ? (
+                        <div className="flex items-center space-x-2">
+                          <div className="w-7 h-7 rounded-lg overflow-hidden bg-slate-200 dark:bg-slate-800 shrink-0 border border-cyan-500/40">
+                            {v.matched_worker_avatar ? (
+                              <img 
+                                src={`/api/workers/avatar/${v.matched_worker_avatar}`} 
+                                alt="" 
+                                className="w-full h-full object-cover" 
+                              />
+                            ) : (
+                              <User className="w-4 h-4 m-1.5 text-cyan-500" />
+                            )}
+                          </div>
+                          <div>
+                            <div className="font-extrabold text-cyan-800 dark:text-cyan-300 flex items-center space-x-1">
+                              <span>{v.matched_worker_name}</span>
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
+                                ({v.match_similarity_pct}%)
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                              {v.matched_worker_code || ''} {v.matched_worker_dept ? `| ${v.matched_worker_dept}` : ''}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">Chưa xác định</span>
+                      )}
+                    </td>
                     <td className="py-3 px-4 font-medium text-slate-800 dark:text-slate-200">{v.camera_name || 'Camera Giám Sát'}</td>
                     <td className="py-3 px-4">
                       <span className="px-2 py-0.5 rounded-full bg-red-500/15 text-red-700 dark:text-red-300 font-bold font-mono">
@@ -471,6 +691,292 @@ export default function DailyViolationsPage({ onBackToLive, onSelectSnapshot }) 
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: BẢNG TỔNG HỢP & XẾP HẠNG KỶ LUẬT CÔNG NHÂN (AUDIT)
+          ======================================================== */}
+      {isAuditModalOpen && auditSummary && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 animate-fade-in">
+          <div className="bg-white dark:bg-[#0b101c] border border-slate-200 dark:border-slate-800 rounded-3xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#0e1424]">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base sm:text-lg text-slate-900 dark:text-white flex items-center tracking-tight">
+                    <span>BÁO CÁO KỶ LUẬT CÔNG NHÂN THEO NGÀY</span>
+                    <span className="ml-2 px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 font-mono text-xs font-black">
+                      {selectedDate}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center space-x-1.5 mt-0.5">
+                    <span>Đối soát khuôn mặt tự động bằng</span>
+                    <span className="font-semibold text-cyan-600 dark:text-cyan-400">DeepFace AI & Qdrant 512D</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleExportWorkerAuditCSV}
+                  className="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-xs font-bold transition-all shadow-sm"
+                  title="Tải file Excel/CSV báo cáo kỷ luật này"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>Tải Báo Cáo Kỷ Luật (CSV)</span>
+                </button>
+
+                <button
+                  onClick={() => setIsAuditModalOpen(false)}
+                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body (Scrollable) */}
+            <div className="p-6 overflow-y-auto space-y-6">
+              
+              {/* 3 Metric Bento Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Tổng Vụ Vi Phạm
+                  </span>
+                  <div className="mt-2 text-2xl font-black text-slate-900 dark:text-white font-mono">
+                    {auditSummary.total_violations}
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">Toàn bộ vi phạm camera ghi nhận</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-cyan-500/10 dark:bg-cyan-950/30 border border-cyan-500/30">
+                  <span className="text-[11px] font-bold text-cyan-700 dark:text-cyan-400 uppercase tracking-wider">
+                    Đã Xác Định Danh Tính
+                  </span>
+                  <div className="mt-2 text-2xl font-black text-cyan-800 dark:text-cyan-300 font-mono">
+                    {auditSummary.identified_count}
+                    <span className="text-xs font-normal text-cyan-600 dark:text-cyan-400 ml-1.5">
+                      ({auditSummary.total_violations > 0 ? Math.round((auditSummary.identified_count / auditSummary.total_violations) * 100) : 0}%)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-cyan-700/80 dark:text-cyan-400/80 mt-1">Trùng khớp hồ sơ công nhân Qdrant</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-amber-500/10 dark:bg-amber-950/30 border border-amber-500/30">
+                  <span className="text-[11px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
+                    Chưa Định Danh (Khách / Khác)
+                  </span>
+                  <div className="mt-2 text-2xl font-black text-amber-800 dark:text-amber-300 font-mono">
+                    {auditSummary.unknown_count}
+                  </div>
+                  <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 mt-1">Người ngoài chưa lưu vector</p>
+                </div>
+              </div>
+
+              {/* BẢNG XẾP HẠNG CÔNG NHÂN VI PHẠM (DISCIPLINARY RANKING) */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-extrabold text-slate-900 dark:text-white uppercase tracking-tight flex items-center space-x-2">
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
+                    <span>Xếp Hạng Công Nhân Vi Phạm Nhiều Nhất</span>
+                  </h4>
+                  <span className="text-xs text-slate-500">
+                    Sắp xếp theo số lượt vi phạm giảm dần
+                  </span>
+                </div>
+
+                {auditSummary.workers && auditSummary.workers.length > 0 ? (
+                  <div className="space-y-3">
+                    {auditSummary.workers.map((worker, rankIdx) => {
+                      const simPct = Math.round((worker.highest_similarity || 0) * 100)
+                      return (
+                        <div 
+                          key={worker.worker_id}
+                          className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800/90 shadow-sm hover:border-amber-500/50 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                        >
+                          {/* Worker Left Info */}
+                          <div className="flex items-center space-x-3.5 min-w-0">
+                            {/* Rank Badge */}
+                            <div className={`w-8 h-8 rounded-xl font-black font-mono flex items-center justify-center text-sm shrink-0 shadow-sm ${
+                              rankIdx === 0 
+                                ? 'bg-red-500 text-white shadow-red-500/30' 
+                                : rankIdx === 1 
+                                  ? 'bg-amber-500 text-slate-950 shadow-amber-500/30' 
+                                  : rankIdx === 2
+                                    ? 'bg-amber-600/80 text-white'
+                                    : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            }`}>
+                              #{rankIdx + 1}
+                            </div>
+
+                            {/* Avatar */}
+                            <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 shrink-0">
+                              {worker.avatar_path ? (
+                                <img 
+                                  src={`/api/workers/avatar/${worker.avatar_path}`} 
+                                  alt={worker.full_name} 
+                                  className="w-full h-full object-cover" 
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                  <User className="w-6 h-6" />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Name & Dept */}
+                            <div className="min-w-0">
+                              <h5 className="font-extrabold text-sm text-slate-900 dark:text-white truncate">
+                                {worker.full_name}
+                              </h5>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center space-x-2 mt-0.5">
+                                <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                                  Mã: {worker.employee_code}
+                                </span>
+                                <span>•</span>
+                                <span>{worker.department || 'Đội Thi Công'}</span>
+                              </p>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold">
+                                  Độ khớp AI: {simPct}%
+                                </span>
+                                <span className="text-[10px] text-slate-400">
+                                  Lần cuối: {worker.latest_time}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Worker Right: Violation Count & Timeline */}
+                          <div className="flex flex-col md:items-end justify-center shrink-0">
+                            <div className="flex items-center space-x-2">
+                              <span className="px-3 py-1 rounded-full bg-red-500 text-white font-black text-xs shadow-sm">
+                                {worker.violation_count} LẦN VI PHẠM
+                              </span>
+                            </div>
+
+                            {/* Timeline Chips */}
+                            {worker.time_list && worker.time_list.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2 max-w-xs justify-start md:justify-end">
+                                {worker.time_list.slice(0, 5).map((t, tIdx) => (
+                                  <span 
+                                    key={tIdx}
+                                    className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
+                                  >
+                                    {t}
+                                  </span>
+                                ))}
+                                {worker.time_list.length > 5 && (
+                                  <span className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px] font-mono text-slate-500">
+                                    +{worker.time_list.length - 5}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Violation Snapshots Gallery */}
+                            {worker.snapshot_list && worker.snapshot_list.length > 0 && (
+                              <div className="flex items-center space-x-1.5 mt-2">
+                                <span className="text-[10px] text-slate-400 mr-1">Bằng chứng:</span>
+                                {worker.snapshot_list.slice(0, 3).map((snap, sIdx) => (
+                                  <button
+                                    key={sIdx}
+                                    onClick={() => onSelectSnapshot(`/api/violations/image/${snap}`)}
+                                    className="w-8 h-8 rounded-lg overflow-hidden border border-slate-300 dark:border-slate-700 hover:border-amber-500 transition-all shadow-xs"
+                                    title="Nhấn để phóng to ảnh vi phạm"
+                                  >
+                                    <img 
+                                      src={`/api/violations/image/${snap}`} 
+                                      alt="" 
+                                      className="w-full h-full object-cover" 
+                                    />
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="p-8 text-center bg-slate-50 dark:bg-slate-900/40 rounded-2xl border border-slate-200 dark:border-slate-800">
+                    <p className="text-xs text-slate-500">
+                      Chưa có công nhân nào được xác định danh tính. Hãy đăng ký công nhân tại mục <strong>Workers</strong> và bấm nút <strong>"Tổng Hợp Công Nhân Vi Phạm (AI)"</strong> để hệ thống tự động quét lại!
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* CÁC TRƯỜNG HỢP CHƯA XÁC ĐỊNH DANH TÍNH (UNKNOWN / VISITORS) */}
+              {auditSummary.unknown_count > 0 && auditSummary.unknown_details && (
+                <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider flex items-center space-x-1.5">
+                      <AlertTriangle className="w-4 h-4 text-amber-500" />
+                      <span>{auditSummary.unknown_count} Vụ Vi Phạm Chưa Xác Định Được Danh Tính</span>
+                    </h5>
+                    <span className="text-[11px] text-slate-500">
+                      (Người ngoài, khách tham quan, hoặc công nhân chưa nạp khuôn mặt)
+                    </span>
+                  </div>
+
+                  {auditSummary.unknown_details.unknown_snapshots && (
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {auditSummary.unknown_details.unknown_snapshots.slice(0, 8).map((snap, uIdx) => (
+                        <button
+                          key={uIdx}
+                          onClick={() => onSelectSnapshot(`/api/violations/image/${snap}`)}
+                          className="w-16 h-12 rounded-xl overflow-hidden border border-slate-300 dark:border-slate-700 hover:border-amber-500 transition-all shadow-xs group relative"
+                        >
+                          <img 
+                            src={`/api/violations/image/${snap}`} 
+                            alt="" 
+                            className="w-full h-full object-cover" 
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                            <Maximize2 className="w-3.5 h-3.5 text-white" />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0e1424] flex items-center justify-between">
+              <span className="text-xs text-slate-500 hidden sm:inline">
+                Dữ liệu được lưu trữ tự động trong PostgreSQL & MinIO
+              </span>
+
+              <div className="flex items-center space-x-2 ml-auto">
+                <button
+                  onClick={handleExportWorkerAuditCSV}
+                  className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>Xuất Báo Cáo Kỷ Luật (CSV)</span>
+                </button>
+
+                <button
+                  onClick={() => setIsAuditModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-colors"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+
+          </div>
         </div>
       )}
 

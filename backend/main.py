@@ -651,7 +651,7 @@ def api_identify_daily_violations(date: str):
             continue
 
         # Lấy dữ liệu ảnh (ưu tiên MinIO, fallback đĩa cục bộ)
-        img_bytes = minio_storage.get_image_bytes(snapshot_filename)
+        img_bytes, _ = minio_storage.get_image_bytes(snapshot_filename)
         if not img_bytes:
             continue
 

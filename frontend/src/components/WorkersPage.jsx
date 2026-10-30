@@ -726,3 +726,4 @@ export default function WorkersPage({ onBackToLive, onWorkerCountChange }) {
     </div>
   )
 }
+

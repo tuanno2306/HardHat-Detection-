@@ -156,3 +156,4 @@ class QdrantService:
 
 # Singleton instance
 qdrant_service = QdrantService()
+

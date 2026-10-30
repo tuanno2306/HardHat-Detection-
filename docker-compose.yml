@@ -35,6 +35,10 @@ services:
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://127.0.0.1:9000}
     volumes:
       - violations_storage:/app/static/violations
+      - /home/tuannoiuem/.deepface:/root/.deepface
+      - ./static/workers:/app/static/workers
+      - ./backend:/app/backend
+      - ./frontend/dist:/app/frontend/dist
 
   # =============================================================
   # DỊCH VỤ MINIO OBJECT STORAGE (S3 COMPATIBLE)
