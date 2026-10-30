@@ -133,18 +133,24 @@ class FaceScanProbeRequest(BaseModel):
 # ==========================================
 
 async def generate_frames(request: Request):
-    """Generator sinh luồng MJPEG ổn định đạt 30-60 FPS cho trình duyệt, tự động dừng khi client ngắt kết nối"""
+    """Generator sinh luồng MJPEG ổn định đạt 25-30 FPS cho trình duyệt, tự động dừng khi client ngắt kết nối"""
+    last_sent_seq = -1
     try:
         while True:
             if await request.is_disconnected():
                 break
-            frame_bytes = camera_streamer.get_jpeg_frame()
+            frame_bytes, seq = camera_streamer.get_latest_jpeg_feed()
             if frame_bytes is not None:
-                yield (b'--frame\r\n'
-                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-                await asyncio.sleep(0.01)
+                if seq != last_sent_seq or seq == 0:
+                    last_sent_seq = seq
+                    yield (b'--frame\r\n'
+                           b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                    await asyncio.sleep(0.02)  # Nhịp ~30-40 FPS mượt mà
+                else:
+                    # Tránh gửi frame cũ liên tục khi chưa có frame mới
+                    await asyncio.sleep(0.025)
             else:
-                await asyncio.sleep(0.03)
+                await asyncio.sleep(0.04)
     except (asyncio.CancelledError, GeneratorExit):
         pass
 
@@ -507,12 +513,12 @@ def api_test_phone_alert():
 
         triggered = phone_alert_manager.trigger_phone_alert(
             camera_source=src,
-            message="Thử nghiệm chớp đèn flash và phát âm thanh loa ngoài điện thoại thành công!",
+            message="Thử nghiệm phát âm thanh loa ngoài điện thoại thành công!",
             force=True
         )
         return {
             "success": triggered,
-            "message": "Đã gửi tín hiệu chớp đèn flash và truyền âm thanh tới loa ngoài điện thoại!" if triggered else "Không thể gửi tín hiệu tới IP Webcam."
+            "message": "Đã truyền âm thanh giọng nói cảnh báo tới loa ngoài điện thoại!" if triggered else "Không thể gửi tín hiệu tới IP Webcam."
         }
     except Exception as e:
         return {"success": False, "message": f"Lỗi điều khiển điện thoại: {str(e)}"}

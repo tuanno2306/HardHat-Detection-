@@ -317,10 +317,10 @@ export default function App() {
     }
   }
 
-  // Thử rung máy & loa ngoài trên điện thoại IP Webcam (Non-blocking Toast)
+  // Thử loa ngoài trên điện thoại IP Webcam (Non-blocking Toast)
   const handleTestPhoneAlert = async () => {
     try {
-      showToast("Đang kích hoạt rung & loa ngoài điện thoại...", "info")
+      showToast("Đang kích hoạt loa ngoài điện thoại...", "info")
       const res = await fetch('/api/test_phone_alert', { method: 'POST' })
       const data = await res.json()
       showToast(data.message, data.success ? "success" : "error")

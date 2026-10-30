@@ -24,6 +24,8 @@ class VideoCameraStream:
         
         self.current_raw_frame = None
         self.current_annotated_frame = None
+        self.latest_encoded_jpeg = None
+        self.frame_seq = 0
         self.last_analysis = {
             "has_violation": False,
             "violations": [],
@@ -91,6 +93,8 @@ class VideoCameraStream:
                 self.status_message = "Camera đang tắt"
                 self.current_raw_frame = None
                 self.current_annotated_frame = None
+                self.latest_encoded_jpeg = None
+                self.frame_seq += 1
                 self.last_analysis = {
                     "has_violation": False,
                     "violations": [],
@@ -161,8 +165,8 @@ class VideoCameraStream:
         import urllib.request
         import socket
 
-        # Thiết lập socket timeout để không bao giờ bị treo vĩnh viễn trên stream.read()
-        socket.setdefaulttimeout(2.5)
+        # Thiết lập socket timeout 4.0s để không ngắt kết nối giả khi mạng Wi-Fi có độ trễ nhẹ
+        socket.setdefaulttimeout(4.0)
 
         while self.is_running and self.worker_id == worker_id:
             if not self.is_camera_enabled:
@@ -216,10 +220,14 @@ class VideoCameraStream:
 
                         frame = cv2.imdecode(np.frombuffer(jpg, dtype=np.uint8), cv2.IMREAD_COLOR)
                         if frame is not None and self.worker_id == worker_id:
+                            annotated = self.detector.draw_annotations(frame, self.last_analysis, fps=self.fps)
+                            ret, buf = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
                             with self.lock:
                                 self.current_raw_frame = frame
-                                annotated = self.detector.draw_annotations(frame, self.last_analysis, fps=self.fps)
                                 self.current_annotated_frame = annotated
+                                if ret:
+                                    self.latest_encoded_jpeg = buf.tobytes()
+                                    self.frame_seq += 1
 
                             frame_count += 1
                             now = time.time()
@@ -292,10 +300,14 @@ class VideoCameraStream:
             self.is_connected = True
             self.status_message = "Đang hoạt động ổn định"
             
+            annotated = self.detector.draw_annotations(frame, self.last_analysis, fps=self.fps)
+            ret, buf = cv2.imencode(".jpg", annotated, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
             with self.lock:
                 self.current_raw_frame = frame
-                annotated = self.detector.draw_annotations(frame, self.last_analysis, fps=self.fps)
                 self.current_annotated_frame = annotated
+                if ret:
+                    self.latest_encoded_jpeg = buf.tobytes()
+                    self.frame_seq += 1
 
             frame_count += 1
             now = time.time()
@@ -350,8 +362,8 @@ class VideoCameraStream:
 
             time.sleep(0.04)
 
-    def get_jpeg_frame(self):
-        """Lấy frame định dạng JPEG để stream qua Flask HTTP"""
+    def get_latest_jpeg_feed(self):
+        """Lấy frame JPEG và sequence number tức thì (<0.01ms), không tiêu tốn CPU nén lại nhiều lần"""
         with self.lock:
             if not self.is_camera_enabled:
                 # Màn hình hiển thị khi người dùng tắt camera
@@ -360,21 +372,27 @@ class VideoCameraStream:
                 cv2.putText(frame, "CAMERA DANG TAT", (180, 200), cv2.FONT_HERSHEY_DUPLEX, 0.9, (80, 80, 240), 2)
                 cv2.putText(frame, "He thong dang tam dung ghi hinh va phan tich.", (120, 250), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (170, 170, 170), 1)
                 cv2.putText(frame, "Nhan 'Bat Camera' tren giao dien de tiep tuc.", (130, 290), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 220, 0), 1)
-            elif self.current_annotated_frame is not None:
-                frame = self.current_annotated_frame
-            else:
-                # Tạo màn hình chờ mẫu nếu chưa có camera
-                frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                msg1 = "HE THONG GIAM SAT AN TOAN LAO DONG"
-                msg2 = self.status_message
-                msg3 = "Ket noi Webcam (0) hoac Camera Dien thoai (IP Webcam URL)"
-                cv2.putText(frame, msg1, (30, 180), cv2.FONT_HERSHEY_DUPLEX, 0.7, (0, 200, 255), 2)
-                cv2.putText(frame, msg2, (30, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
-                cv2.putText(frame, msg3, (30, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+                ret, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+                return (buf.tobytes() if ret else None), 0
 
-        # Mã hoá JPEG tốc độ cao (chất lượng 70 giúp nén siêu nhanh, đạt 30+ FPS)
-        ret, buffer = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-        return buffer.tobytes() if ret else None
+            if self.latest_encoded_jpeg is not None:
+                return self.latest_encoded_jpeg, self.frame_seq
+
+            # Tạo màn hình chờ mẫu nếu chưa có camera
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            msg1 = "HE THONG GIAM SAT AN TOAN LAO DONG"
+            msg2 = self.status_message
+            msg3 = "Ket noi Webcam (0) hoac Camera Dien thoai (IP Webcam URL)"
+            cv2.putText(frame, msg1, (30, 180), cv2.FONT_HERSHEY_DUPLEX, 0.7, (0, 200, 255), 2)
+            cv2.putText(frame, msg2, (30, 230), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1)
+            cv2.putText(frame, msg3, (30, 280), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (150, 150, 150), 1)
+            ret, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+            return (buf.tobytes() if ret else None), 0
+
+    def get_jpeg_frame(self):
+        """Duy trì tương thích ngược cho endpoint cũ"""
+        jpeg, _ = self.get_latest_jpeg_feed()
+        return jpeg
 
     def get_current_status(self):
         with self.lock:

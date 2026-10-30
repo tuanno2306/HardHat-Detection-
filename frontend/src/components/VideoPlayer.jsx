@@ -107,15 +107,15 @@ export default function VideoPlayer({
             <span className="hidden sm:inline">Thử Chuông</span>
           </button>
 
-          {/* Test Phone Alert (Flash & Speaker) */}
+          {/* Test Phone Alert (Speaker Voice) */}
           {status.camera_source && (status.camera_source.includes('8080') || status.camera_source.startsWith('http')) && (
             <button
               onClick={onTestPhoneAlert}
               className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-xs text-cyan-700 dark:text-cyan-300 border border-cyan-500/30 transition-colors shadow-sm"
-              title="Thử chớp đèn flash và phát âm thanh loa ngoài trên điện thoại camera"
+              title="Thử phát âm thanh giọng nói cảnh báo qua loa ngoài điện thoại camera"
             >
               <Smartphone className="w-3.5 h-3.5 text-cyan-500" />
-              <span className="hidden sm:inline">Thử Loa & Flash ĐT</span>
+              <span className="hidden sm:inline">Thử Loa ĐT</span>
             </button>
           )}
 
