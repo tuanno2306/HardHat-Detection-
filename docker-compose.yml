@@ -1,0 +1,62 @@
+services:
+  # =============================================================
+  # ỨNG DỤNG GIÁM SÁT MŨ BẢO HỘ (FASTAPI + REACT SPA HUD DASHBOARD)
+  # Kết nối trực tiếp tới PostgreSQL cổng 5433 của bạn trên máy
+  # =============================================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hardhat_fastapi_app
+    restart: unless-stopped
+    # Dùng network host để kết nối trực tiếp vào PostgreSQL cổng 5433 (pgAdmin)
+    # và thu luồng camera không dây trên mạng LAN mượt mà
+    network_mode: "host"
+    # Cấp quyền truy cập phần cứng để nhận diện Webcam máy tính (/dev/video*)
+    privileged: true
+    environment:
+      - PG_HOST=${PG_HOST:-127.0.0.1}
+      - PG_PORT=${PG_PORT:-5433}
+      - PG_USER=${PG_USER:-finance_app}
+      - PG_PASSWORD=${PG_PASSWORD:-fOQH9DQYFt0vQDbz5CxNaZIjbWXkK1BSuZ8RqFDiw3w}
+      - PG_DB=${PG_DB:-hardhat_detection}
+      - ROBOFLOW_API_KEY=${ROBOFLOW_API_KEY:-sJcTTDJNZIaCJbaMF4bU}
+      - ROBOFLOW_PROJECT_ID=${ROBOFLOW_PROJECT_ID:-hardhat3-dptal}
+      - ROBOFLOW_MODEL_VERSION=${ROBOFLOW_MODEL_VERSION:-1}
+      - CONFIDENCE_THRESHOLD=${CONFIDENCE_THRESHOLD:-40}
+      - CAMERA_SOURCE=${CAMERA_SOURCE:-http://192.168.1.233:8080/video}
+      - ALERT_COOLDOWN_SECONDS=${ALERT_COOLDOWN_SECONDS:-15}
+      - SECRET_KEY=${SECRET_KEY:-hardhat_vision_production_secret_key_2026}
+      # Cấu hình MinIO Object Storage
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-127.0.0.1:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+      - MINIO_BUCKET=${MINIO_BUCKET:-hardhat-violations}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://127.0.0.1:9000}
+    volumes:
+      - violations_storage:/app/static/violations
+
+  # =============================================================
+  # DỊCH VỤ MINIO OBJECT STORAGE (S3 COMPATIBLE)
+  # Lưu trữ đám mây các ảnh chụp bằng chứng vi phạm
+  # Web Console: http://localhost:9001 (minioadmin / minioadmin)
+  # =============================================================
+  minio:
+    image: elestio/minio:latest
+    container_name: hardhat_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+volumes:
+  violations_storage:
+    driver: local
+  minio_data:
+    driver: local
