@@ -32,9 +32,9 @@ weights/
 *.onnx
 
 # Dữ liệu tạm, upload & static sinh ra khi chạy
-static/uploads/
-static/captures/
-static/temp/
+static/css/
+static/js/
+static/violations/
 *.log
 
 # Dữ liệu lưu trữ cục bộ (MinIO / Qdrant storage nếu mount volume local)
